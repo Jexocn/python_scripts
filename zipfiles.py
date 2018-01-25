@@ -4,6 +4,12 @@ import sys
 import subprocess
 import re
 
+ignores = ['.git']
+
+def fnames_filter(fnames):
+	for fname in ignores:
+		fnames.remove(fname)
+
 def gen_zipfile_name(dirname, start_id):
 	while True:
 		zipfname = os.path.join(dirname, "{:05d}.7z".format(start_id))
@@ -11,37 +17,40 @@ def gen_zipfile_name(dirname, start_id):
 			return zipfname, start_id + 1
 		start_id += 1
 
+def zip_file(dirname, fname, id_dict):
+	full_path = os.path.join(dirname, fname)
+	if os.path.isfile(full_path) and full_path != self_path:
+		basename, extname = os.path.splitext(fname)
+		if extname != ".7z" and not zipped.has_key(full_path):
+			if id_dict.has_key(dirname):
+				zip_file_id = id_dict[dirname]
+			else:
+				zip_file_id = 0
+			zip_fname, zip_file_id = gen_zipfile_name(dirname, zip_file_id)
+			id_dict[dirname] = zip_file_id
+			print "zip [{0}] ===> [{1}]".format(full_path, zip_fname)
+			if passwd:
+				r = subprocess.call(['7z', 'a', '-mhe=on', '-p{0}'.format(passwd), zip_fname, full_path])
+			else:
+				r = subprocess.call(['7z', 'a', '-mhe=on', zip_fname, full_path])
+			if r == 0:
+				print "zip [{0}] ===> [{1}] ok".format(full_path, zip_fname)
+				if remove_origin:
+					print "remove [{0}]".format(full_path)
+					os.remove(full_path)
+					print "remove [{0}] done".format(full_path)
+			else:
+				print "zip [{0}] --> [{1}] fail, error code is {2}".format(full_path, zip_fname, r)
+		elif extname != ".7z" and remove_origin:
+			print "remove [{0}]".format(full_path)
+			os.remove(full_path)
+			print "remove [{0}] done".format(full_path)
+
 def zip_walk(arg, dirname, fnames):
+	fnames_filter(fnames)
 	fnames.sort()
-	id_dict = arg
 	for fname in fnames:
-		full_path = os.path.join(dirname, fname)
-		if os.path.isfile(full_path) and full_path != self_path:
-			basename, extname = os.path.splitext(fname)
-			if extname != ".7z" and not zipped.has_key(full_path):
-				if id_dict.has_key(dirname):
-					zip_file_id = id_dict[dirname]
-				else:
-					zip_file_id = 0
-				zip_fname, zip_file_id = gen_zipfile_name(dirname, zip_file_id)
-				id_dict[dirname] = zip_file_id
-				print "zip [{0}] ===> [{1}]".format(full_path, zip_fname)
-				if passwd:
-					r = subprocess.call(['7z', 'a', '-mhe=on', '-p{0}'.format(passwd), zip_fname, full_path])
-				else:
-					r = subprocess.call(['7z', 'a', '-mhe=on', zip_fname, full_path])
-				if r == 0:
-					print "zip [{0}] ===> [{1}] ok".format(full_path, zip_fname)
-					if remove_origin:
-						print "remove [{0}]".format(full_path)
-						os.remove(full_path)
-						print "remove [{0}] done".format(full_path)
-				else:
-					print "zip [{0}] --> [{1}] fail, error code is {2}".format(full_path, zip_fname, r)
-			elif extname != ".7z" and remove_origin:
-				print "remove [{0}]".format(full_path)
-				os.remove(full_path)
-				print "remove [{0}] done".format(full_path)
+		zip_file(dirname, fname, arg)
 
 def make_zip_file_list(zip_info):
 	lines = [re.split('\s+', line.strip()) for line in zip_info.split('\n')]
@@ -80,20 +89,24 @@ def make_zip_file_list(zip_info):
 			break
 	return [lines[k][Name_k] for k in xrange(dash_begin+1, dash_end)]
 
+def check_file(dirname, fname, zipped):
+	full_path = os.path.join(dirname, fname)
+	if os.path.isfile(full_path):
+		basename, extname = os.path.splitext(fname)
+		if extname == ".7z":
+			print "check [{0}]".format(full_path)
+			if passwd:
+				r = subprocess.check_output(['7z', 'l', '-p{0}'.format(passwd), full_path])
+			else:
+				r = subprocess.check_output(['7z', 'l', full_path])
+			for fn in make_zip_file_list(r):
+				zipped[os.path.join(dirname, fn)] = full_path
+			print "check [{0}] done".format(full_path)	
+
 def check_walk(arg, dirname, fnames):
+	fnames_filter(fnames)
 	for fname in fnames:
-		full_path = os.path.join(dirname, fname)
-		if os.path.isfile(full_path):
-			basename, extname = os.path.splitext(fname)
-			if extname == ".7z":
-				print "check [{0}]".format(full_path)
-				if passwd:
-					r = subprocess.check_output(['7z', 'l', '-p{0}'.format(passwd), full_path])
-				else:
-					r = subprocess.check_output(['7z', 'l', full_path])
-				for fn in make_zip_file_list(r):
-					arg[os.path.join(dirname, fn)] = full_path
-				print "check [{0}] done".format(full_path)
+		check_file(dirname, fname, arg)
 
 def zip_files(top_path):
 	os.path.walk(top_path, zip_walk, {})
