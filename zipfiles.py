@@ -8,7 +8,8 @@ ignores = ['.git']
 
 def fnames_filter(fnames):
 	for fname in ignores:
-		fnames.remove(fname)
+		if fname in fnames:
+			fnames.remove(fname)
 
 def gen_zipfile_name(dirname, start_id):
 	while True:
