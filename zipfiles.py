@@ -22,21 +22,25 @@ def gen_zipfile_name(dirname, start_id):
 def zip_file(dirname, fname, id_dict):
 	full_path = os.path.join(dirname, fname)
 	if os.path.isfile(full_path) and full_path != self_path:
-		basename, extname = os.path.splitext(fname)
+		basename, extname = os.path.splitext(full_path)
 		if extname != ".7z" and not zipped.has_key(full_path):
-			if id_dict.has_key(dirname):
-				zip_file_id = id_dict[dirname]
+			if basename2zip.has_key(basename):
+				zip_fname = basename2zip[basename]
 			else:
-				zip_file_id = 0
-			zip_fname, zip_file_id = gen_zipfile_name(dirname, zip_file_id)
-			id_dict[dirname] = zip_file_id
+				if id_dict.has_key(dirname):
+					zip_file_id = id_dict[dirname]
+				else:
+					zip_file_id = 0
+				zip_fname, zip_file_id = gen_zipfile_name(dirname, zip_file_id)
+				id_dict[dirname] = zip_file_id
 			print "zip [{0}] ===> [{1}]".format(full_path, zip_fname)
 			if passwd:
-				r = subprocess.call(['7z', 'a', '-mhe=on', '-p{0}'.format(passwd), zip_fname, full_path])
+				r = subprocess.call(['7z', 'a', '-bb3', '-mhe=on', '-p{0}'.format(passwd), zip_fname, full_path])
 			else:
 				r = subprocess.call(['7z', 'a', '-mhe=on', zip_fname, full_path])
 			if r == 0:
 				print "zip [{0}] ===> [{1}] ok".format(full_path, zip_fname)
+				basename2zip[basename] = zip_fname
 				if remove_origin:
 					print "remove [{0}]".format(full_path)
 					os.remove(full_path)
@@ -102,7 +106,10 @@ def check_file(dirname, fname, zipped):
 			else:
 				r = subprocess.check_output(['7z', 'l', full_path])
 			for fn in make_zip_file_list(r):
-				zipped[os.path.join(dirname, fn)] = full_path
+				full_fn = os.path.join(dirname, fn)
+				base_fn, ext_fn = os.path.splitext(full_fn)
+				zipped[full_fn] = full_path
+				basename2zip[base_fn] = full_path
 			print "check [{0}] done".format(full_path)	
 
 def check_walk(arg, dirname, fnames):
@@ -117,8 +124,11 @@ def check_zipped(top_path):
 	zipped = {}
 	os.path.walk(top_path, check_walk, zipped)
 	print "----------------------------------------"
-	print "zipped fiels:"
+	print "zipped:"
 	for (k,v) in zipped.items():
+		print k, "->", v
+	print "basename2zip:"
+	for (k,v) in basename2zip.items():
 		print k, "->", v
 	print "----------------------------------------"
 	return zipped
@@ -136,5 +146,6 @@ if __name__ == "__main__":
 			if argc > 3:
 				top_path = os.path.abspath(sys.argv[3])
 	print "zip files in [{0}] passwd:{1} remove_origin:{2}".format(top_path, passwd, remove_origin)
+	basename2zip = {}
 	zipped = check_zipped(top_path)
 	zip_files(top_path)
