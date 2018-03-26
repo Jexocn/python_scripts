@@ -14,8 +14,7 @@ def fnames_filter(fnames):
 			fnames.remove(fname)
 
 def get_file_size(path):
-	fsize = os.path.getsize(path)
-	return fsize/float(1024*1024*1024)
+	return os.path.getsize(path)
 
 def make_zip_file_list(zip_info):
 	lines = [re.split('\s+', line.strip()) for line in zip_info.split('\n')]
@@ -59,30 +58,30 @@ def check_and_cut_file(dirname, fname, arg):
 	full_path = os.path.join(dirname, fname)
 	if os.path.isfile(full_path) and full_path != self_path:
 		basename, extname = os.path.splitext(full_path)
-		if extname == ".7z" and get_file_size(full_path) > 4:
+		if extname == ".7z" and get_file_size(full_path) > bytes_of_volume_size:
 			print "cut [{0}]".format(full_path)
 			if passwd:
 				r = subprocess.check_output(['7z', 'l', '-p{0}'.format(passwd), full_path])
 			else:
 				r = subprocess.check_output(['7z', 'l', full_path])
 			zipped_files = make_zip_file_list(r)
-			for fn in zipped_files:
-				full_fn = os.path.join(dirname, fn)
+			zipped_files_full_fn = [os.path.join(dirname, fn) for fn in zipped_files]
+			for full_fn in zipped_files_full_fn:
 				if os.path.exists(full_fn):
 					os.remove(full_fn)
+			cmds = ['7z', 'x', '-mhe=on', '-o{0}'.format(dirname)]
 			if passwd:
-				r = subprocess.call(['7z', 'e', '-bb3', '-mhe=on', '-p{0}'.format(passwd), full_path])
-			else:
-				r = subprocess.call(['7z', 'e', '-mhe=on', full_path])
+				cmds.append('-p{0}'.format(passwd))
+			cmds.append(full_path)
+			r = subprocess.call(cmds)
 			if r == 0:
 				print "unzip [{0}] ok".format(full_path)
 				os.rename(full_path, full_path+'.bak')
-				cmds = None
+				cmds = ['7z', 'a', '-mhe=on', '-v{0}'.format(volume_size)]
 				if passwd:
-					cmds = ['7z', 'a', '-bb3', '-mhe=on', '-v4g', '-p{0}'.format(passwd), full_path]
-				else:
-					cmds = ['7z', 'a', '-mhe=on', '-v4g', full_path]
-				cmds.append(zipped_files)
+					cmds.append('-p{0}'.format(passwd))
+				cmds.append(full_path)
+				cmds.extend(zipped_files_full_fn)
 				r = subprocess.call(cmds)
 				if r == 0:
 					print "cut zip [{0}] ok".format(full_path)
@@ -107,15 +106,35 @@ def cut_walk(arg, dirname, fnames):
 def cut(top_path):
 	os.path.walk(top_path, cut_walk, None)
 
+def get_bytes_volume_size(v):
+	r = re.match("(\d+)([bkmg])$", v)
+	n, u = r.groups()
+	n = int(n)
+	if u == 'b':
+		return n
+	if u == 'k':
+		return n*1024
+	if u == 'm':
+		return n*1024*1024
+	return n*1024*1024*1024
+
 if __name__ == "__main__":
 	self_path = os.path.abspath(sys.argv[0])
 	argc = len(sys.argv)
 	passwd = None
+	volume_size = '4g'
+	bytes_of_volume_size = 4*1024*1024*1024
 	top_path = os.path.join(os.path.dirname(self_path))
 	if argc > 1:
 		passwd = sys.argv[1]
-		if argc > 2:
-			top_path = os.path.abspath(sys.argv[3])
+		if passwd == '':
+			passwd = None
+	if argc > 2 and sys.argv[2] != '':
+		top_path = os.path.abspath(sys.argv[2])
+	if argc > 3:
+		volume_size = sys.argv[3]
+		assert re.match("\d+[bkmg]$", volume_size)
+		bytes_of_volume_size = get_bytes_volume_size(volume_size)
 	print "cut 7z files in [{0}] passwd:{1}".format(top_path, passwd)
 	cut(top_path)
 

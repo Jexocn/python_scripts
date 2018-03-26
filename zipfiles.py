@@ -22,8 +22,9 @@ def gen_zipfile_name(dirname, start_id):
 def zip_file(dirname, fname, id_dict):
 	full_path = os.path.join(dirname, fname)
 	if os.path.isfile(full_path) and full_path != self_path:
-		basename, extname = os.path.splitext(full_path)
-		if extname != ".7z" and not zipped.has_key(full_path):
+		r = re.search("\.7z(\.\d+)?$", fname)
+		if not r and not zipped.has_key(full_path):
+			basename, extname = os.path.splitext(full_path)
 			if basename2zip.has_key(basename):
 				zip_fname = basename2zip[basename]
 			else:
@@ -34,10 +35,13 @@ def zip_file(dirname, fname, id_dict):
 				zip_fname, zip_file_id = gen_zipfile_name(dirname, zip_file_id)
 				id_dict[dirname] = zip_file_id
 			print "zip [{0}] ===> [{1}]".format(full_path, zip_fname)
+			cmds = ['7z', 'a', '-mhe=on']
+			if volume_size:
+				cmds.append('-v{0}'.format(volume_size))
 			if passwd:
-				r = subprocess.call(['7z', 'a', '-bb3', '-mhe=on', '-p{0}'.format(passwd), zip_fname, full_path])
-			else:
-				r = subprocess.call(['7z', 'a', '-mhe=on', zip_fname, full_path])
+				cmds.append('-p{0}'.format(passwd))
+			cmds.extend([zip_fname, full_path])
+			r = subprocess.call(cmds)
 			if r == 0:
 				print "zip [{0}] ===> [{1}] ok".format(full_path, zip_fname)
 				basename2zip[basename] = zip_fname
@@ -47,7 +51,7 @@ def zip_file(dirname, fname, id_dict):
 					print "remove [{0}] done".format(full_path)
 			else:
 				print "zip [{0}] --> [{1}] fail, error code is {2}".format(full_path, zip_fname, r)
-		elif extname != ".7z" and remove_origin:
+		elif not r and remove_origin:
 			print "remove [{0}]".format(full_path)
 			os.remove(full_path)
 			print "remove [{0}] done".format(full_path)
@@ -98,8 +102,7 @@ def make_zip_file_list(zip_info):
 def check_file(dirname, fname, zipped):
 	full_path = os.path.join(dirname, fname)
 	if os.path.isfile(full_path):
-		basename, extname = os.path.splitext(fname)
-		if extname == ".7z":
+		if re.search("\.7z(\.0*1)?$", fname):
 			print "check [{0}]".format(full_path)
 			if passwd:
 				r = subprocess.check_output(['7z', 'l', '-p{0}'.format(passwd), full_path])
@@ -138,14 +141,20 @@ if __name__ == "__main__":
 	argc = len(sys.argv)
 	passwd = None
 	remove_origin = False
+	volume_size = None
 	top_path = os.path.join(os.path.dirname(self_path))
 	if argc > 1:
 		passwd = sys.argv[1]
-		if argc > 2:
-			remove_origin = int(sys.argv[2]) == 1
-			if argc > 3:
-				top_path = os.path.abspath(sys.argv[3])
-	print "zip files in [{0}] passwd:{1} remove_origin:{2}".format(top_path, passwd, remove_origin)
+		if passwd == '':
+			passwd = None
+	if argc > 2:
+		remove_origin = int(sys.argv[2]) == 1
+	if argc > 3:
+		top_path = os.path.abspath(sys.argv[3])
+	if argc > 4:
+		volume_size = sys.argv[4]
+		assert re.match("\d+[bkmg]$", volume_size)
+	print "zip files in [{0}] passwd:{1} remove_origin:{2} volume_size:{3}".format(top_path, passwd, remove_origin, volume_size)
 	basename2zip = {}
 	zipped = check_zipped(top_path)
 	zip_files(top_path)
