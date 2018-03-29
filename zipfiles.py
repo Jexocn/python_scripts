@@ -16,7 +16,7 @@ def fnames_filter(fnames):
 def gen_zipfile_name(dirname, start_id):
 	while True:
 		zipfname = os.path.join(dirname, "{:05d}.7z".format(start_id))
-		if not os.path.exists(zipfname) and glob.glob("{0}.[0-9][0-9]*".format(zipfname)) == 0:
+		if not os.path.exists(zipfname) and len(glob.glob("{0}.[0-9][0-9]*".format(zipfname))) == 0:
 			return zipfname, start_id + 1
 		start_id += 1
 
@@ -144,13 +144,11 @@ if __name__ == "__main__":
 	remove_origin = False
 	volume_size = None
 	top_path = os.path.join(os.path.dirname(self_path))
-	if argc > 1:
+	if argc > 1 and len(sys.argv[1]) > 0:
 		passwd = sys.argv[1]
-		if passwd == '':
-			passwd = None
 	if argc > 2:
 		remove_origin = int(sys.argv[2]) == 1
-	if argc > 3:
+	if argc > 3 and len(sys.argv[3]) > 0:
 		top_path = os.path.abspath(sys.argv[3])
 	if argc > 4:
 		volume_size = sys.argv[4]
