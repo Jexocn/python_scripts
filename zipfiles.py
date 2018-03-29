@@ -4,6 +4,7 @@ import os
 import sys
 import subprocess
 import re
+import glob
 
 ignores = ['.git']
 
@@ -15,7 +16,7 @@ def fnames_filter(fnames):
 def gen_zipfile_name(dirname, start_id):
 	while True:
 		zipfname = os.path.join(dirname, "{:05d}.7z".format(start_id))
-		if not os.path.exists(zipfname):
+		if not os.path.exists(zipfname) and glob.glob("{0}.[0-9][0-9]*".format(zipfname)) == 0:
 			return zipfname, start_id + 1
 		start_id += 1
 
