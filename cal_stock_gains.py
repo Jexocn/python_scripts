@@ -11,12 +11,15 @@ import datetime
 import re
 import math
 import dateutil.parser
+import sys
+import time
+import os
 
 # 注意：
 # ak.stock_history_dividend_detail 获取的数据是按时间降序排列的
 
 def hist_date_to_date(hist_date):
-	return dateutil.parser.parse(hist_date).date()
+	return dateutil.parser.parse(str(hist_date)).date()
 
 def date_to_hist_date(date):
 	return '%d-%02d-%02d' % (date.year, date.month, date.day)
@@ -199,8 +202,8 @@ def cal_stock_gains_riod(symbol, begin_year, end_year, init_amount=10000, divide
 	year_dividend_detail = gen_year_dividend_detail(dividend_detail_df, begin_year, end_year)
 	# 历年分红
 	for year in range(begin_year, end_year+1):
+		idx = year - begin_year + 1
 		if(year in year_dividend_detail):
-			idx = year - begin_year + 1
 			for row in year_dividend_detail[year]:
 				data[idx][0] += row['送股']
 				data[idx][1] += row['派息']
@@ -239,7 +242,59 @@ def cal_stock_gains_riod(symbol, begin_year, end_year, init_amount=10000, divide
 	df = pd.DataFrame(data, index=idx_years, columns=columns)
 	return df
 
+def stock_gains_to_xlsx(symbol, begin_year, end_year, init_amount=10000, fee_rate=0.0005, min_fee=5, save_dir='./stock_gains/'):
+	info_em_df = ak.stock_individual_info_em(symbol=symbol)
+	if len(info_em_df) == 0:
+		print('stock symbol={0} not exists'.format(symbol))
+		return
+	ss_date = info_em_df.loc[info_em_df['item'] == '上市时间'].iloc[0]['value']
+	stock_name = info_em_df.loc[info_em_df['item'] == '股票简称'].iloc[0]['value']
+	if not ss_date is datetime.date:
+		ss_date = hist_date_to_date(ss_date)
+	if ss_date.year >= begin_year:
+		print('stock symbol={0} 上市时间={1} 晚于 {2}-12-31'.format(symbol, ss_date, begin_year-1))
+		return
+	dividend_detail_df, hist_df = fetch_stock_dfs(symbol, begin_year, end_year)
+	gains_df = cal_stock_gains(symbol, begin_year, end_year, init_amount, dividend_detail_df, hist_df)
+	gains_roid_df = cal_stock_gains_riod(symbol, begin_year, end_year, init_amount, dividend_detail_df, hist_df, fee_rate, min_fee)
+	if not os.path.exists(save_dir):
+		os.makedirs(save_dir)
+	with pd.ExcelWriter('{0}{1}-{2}.xlsx'.format(save_dir, symbol, stock_name)) as xw:
+		gains_df.to_excel(xw, sheet_name='红利不复投')
+		gains_roid_df.to_excel(xw, sheet_name='红利复投')
+		xw.close()
+	print('save stock symbol={0} gains success'.format(symbol))
+
+def all_stocks_gains_to_xlsx(begin_year, end_year, init_amount=10000, fee_rate=0.0005, min_fee=5, save_dir='./stock_gains/'):
+	print('获取沪A股票列表...')
+	sh_stocks_df = ak.stock_sh_a_spot_em()
+	print('获取沪A股票列表 done')
+	print('获取深A股票列表...')
+	sz_stocks_df = ak.stock_sz_a_spot_em()
+	print('获取深A股票列表 done')
+	stock_count = len(sh_stocks_df) + len(sz_stocks_df)
+	print('计算保存沪A股票...')
+	p50 = max(len(sh_stocks_df)//50, 2)
+	for i in range(0, len(sh_stocks_df)):
+		stock_gains_to_xlsx(sh_stocks_df.loc[0]['代码'], begin_year, end_year, init_amount, fee_rate, min_fee, save_dir)
+		print("\r", end="")
+		print("progress: {0}/{1}: ".format(i+1, len(sh_stocks_df)), "▋" * (i // p50), end="")
+		sys.stdout.flush()
+		time.sleep(0.05)
+	print('计算保存沪A股票 done')
+	print('计算保存深A股票...')
+	p50 = max(len(sz_stocks_df)//50, 2)
+	for i in range(0, len(sz_stocks_df)):
+		stock_gains_to_xlsx(sz_stocks_df.loc[0]['代码'], begin_year, end_year, init_amount, fee_rate, min_fee, save_dir)
+		print("\r", end="")
+		print("progress: {0}/{1}: ".format(i+1, len(sz_stocks_df)), "▋" * (i // p50), end="")
+		sys.stdout.flush()
+		time.sleep(0.05)
+	print('计算保存深A股票 done')
+
 if __name__ == '__main__':
-	dividend_detail_df, hist_df = fetch_stock_dfs('600309', 2011, 2023)
-	print(cal_stock_gains_riod('600309', 2011, 2023, dividend_detail_df=dividend_detail_df, hist_df=hist_df))
-	print(cal_stock_gains('600309', 2011, 2023, dividend_detail_df=dividend_detail_df, hist_df=hist_df))
+	# dividend_detail_df, hist_df = fetch_stock_dfs('600309', 2011, 2023)
+	# print(cal_stock_gains_riod('600309', 2011, 2023, dividend_detail_df=dividend_detail_df, hist_df=hist_df))
+	# print(cal_stock_gains('600309', 2011, 2023, dividend_detail_df=dividend_detail_df, hist_df=hist_df))
+	# fetch_stocks_and_cal_gains()
+	all_stocks_gains_to_xlsx(2011, 2022)
