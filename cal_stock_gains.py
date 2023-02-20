@@ -240,7 +240,7 @@ def cal_stock_gains_riod(symbol, begin_year, end_year, init_amount=10000, divide
 	df = pd.DataFrame(data, index=idx_years, columns=columns)
 	return df
 
-def stock_gains_to_xlsx(symbol, begin_year, end_year, init_amount=10000, fee_rate=0.0005, min_fee=5, save_dir='./stock_gains/'):
+def stock_gains_to_xlsx(symbol, begin_year, end_year, init_amount=10000, fee_rate=0.0005, min_fee=5, save_dir='./stock_gains/', rank_df=None):
 	info_em_df = ak.stock_individual_info_em(symbol=symbol)
 	if len(info_em_df) == 0:
 		print('股票代码 {0} 不存在'.format(symbol))
@@ -252,12 +252,16 @@ def stock_gains_to_xlsx(symbol, begin_year, end_year, init_amount=10000, fee_rat
 	if ss_date.year >= begin_year:
 		print('{0} {1} 上市时间为 {2} 晚于 {3}-12-31，不处理'.format(symbol, stock_name, ss_date, begin_year-1))
 		return False
-	if stock_name.upper().find('ST') != -1:
-		print('{0} {1} ST股不处理'.format(symbol, stock_name, ss_date, begin_year-1))
+	if stock_name.upper().find('ST') != -1 or stock_name.find('退市') != -1:
+		print('{0} {1} ST股、退市股不处理'.format(symbol, stock_name, ss_date, begin_year-1))
 		return False
 	save_fname = '{0}{1}-{2}.xlsx'.format(save_dir, symbol, stock_name)
 	if os.path.exists(save_fname):
 		print('{0} {1} 已处理过'.format(symbol, stock_name))
+		if not rank_df is None:
+			saved_dfs = pd.read_excel(save_fname, sheet_name=['红利不复投', '红利复投'])
+			gains_df, gains_roid_df = saved_dfs['红利不复投'], saved_dfs['红利复投']
+			rank_df.loc[len(rank_df)] = [symbol, stock_name, gains_df.iloc[len(gains_df)-1]['年化收益率'], gains_roid_df.iloc[len(gains_df)-1]['年化收益率']]
 		return False
 	dividend_detail_df, hist_df = fetch_stock_dfs(symbol, begin_year, end_year)
 	gains_df = cal_stock_gains(symbol, begin_year, end_year, init_amount, dividend_detail_df, hist_df)
@@ -268,9 +272,11 @@ def stock_gains_to_xlsx(symbol, begin_year, end_year, init_amount=10000, fee_rat
 		gains_df.to_excel(xw, sheet_name='红利不复投')
 		gains_roid_df.to_excel(xw, sheet_name='红利复投')
 	print('{0} {1} 保存成功'.format(symbol, stock_name))
+	if not rank_df is None:
+		rank_df.loc[len(rank_df)] = [symbol, stock_name, gains_df.iloc[len(gains_df)-1]['年化收益率'], gains_roid_df.iloc[len(gains_df)-1]['年化收益率']]
 	return True
 
-def batch_stocks_gains_to_xlsx(stocks_df, begin_year, end_year, init_amount=10000, fee_rate=0.0005, min_fee=5, save_dir='./stock_gains/'):
+def batch_stocks_gains_to_xlsx(stocks_df, begin_year, end_year, init_amount=10000, fee_rate=0.0005, min_fee=5, save_dir='./stock_gains/', rank_df=None):
 	stock_count = len(stocks_df)
 	p50 = max(stock_count//50, 2)
 	for i in range(0, len(stocks_df)):
@@ -282,7 +288,7 @@ def batch_stocks_gains_to_xlsx(stocks_df, begin_year, end_year, init_amount=1000
 				print('{0}秒后重试：{1}'.format(round(need_sleep, 1), retry))
 				time.sleep(need_sleep)
 			try:
-				need_sleep = 2+random.random()*3 if stock_gains_to_xlsx(symbol, begin_year, end_year, init_amount, fee_rate, min_fee, save_dir) else 0.05
+				need_sleep = 2+random.random()*3 if stock_gains_to_xlsx(symbol, begin_year, end_year, init_amount, fee_rate, min_fee, save_dir, rank_df) else 0.05
 				break
 			except Exception as e:
 				print('股票代码：{0} 保存失败'.format(symbol))
@@ -291,6 +297,8 @@ def batch_stocks_gains_to_xlsx(stocks_df, begin_year, end_year, init_amount=1000
 				need_sleep = 5+5*random.random()
 			finally:
 				retry += 1
+		if not rank_df is None:
+			print(rank_df.sort_values(by='复投年化', ascending=False).head(10))
 		print("\r", end="")
 		print("进度: {0}/{1}: ".format(i+1, stock_count), "▋" * (i // p50), end="")
 		sys.stdout.flush()
@@ -303,11 +311,12 @@ def all_stocks_gains_to_xlsx(begin_year, end_year, init_amount=10000, fee_rate=0
 	print('获取深A股票列表...')
 	sz_stocks_df = ak.stock_sz_a_spot_em()
 	print('获取深A股票列表 完成')
+	rank_df = pd.DataFrame(columns=['代码', '股票简称', '不复投年化', '复投年化'])
 	print('计算保存沪A股票...')
-	batch_stocks_gains_to_xlsx(sh_stocks_df, begin_year, end_year, init_amount, fee_rate, min_fee, save_dir)
+	batch_stocks_gains_to_xlsx(sh_stocks_df, begin_year, end_year, init_amount, fee_rate, min_fee, save_dir, rank_df)
 	print('计算保存沪A股票 完成')
 	print('计算保存深A股票...')
-	batch_stocks_gains_to_xlsx(sz_stocks_df, begin_year, end_year, init_amount, fee_rate, min_fee, save_dir)
+	batch_stocks_gains_to_xlsx(sz_stocks_df, begin_year, end_year, init_amount, fee_rate, min_fee, save_dir, rank_df)
 	print('计算保存深A股票 完成')
 
 if __name__ == '__main__':
