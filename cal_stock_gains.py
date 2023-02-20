@@ -183,7 +183,7 @@ def cal_dividend_inc_amount(dividend_detail_df, hist_df, begin_year, end_year, i
 		dd_row = dividend_detail_df.loc[dd_idx]
 		cqcx_date = dd_row['除权除息日']
 
-def cal_stock_gains_riod(symbol, begin_year, end_year, init_amount=10000, dividend_detail_df=None, hist_df=None):
+def cal_stock_gains_riod(symbol, begin_year, end_year, init_amount=10000, dividend_detail_df=None, hist_df=None, fee_rate=0.0005, min_fee=5):
 	init_hist = get_init_hist(symbol, begin_year)
 	columns = ['10送x', '10派y', '10转z', '不复权收盘价', '送转股数', '红利', '复投股数', '剩余红利', '总持股数量', '总持股市值']
 	idx_years = [year for year in range(begin_year-1, end_year+1)]
@@ -195,7 +195,7 @@ def cal_stock_gains_riod(symbol, begin_year, end_year, init_amount=10000, divide
 		start_date = '%d0101' % (begin_year)
 		end_date = '%d1231' % (end_year)
 		hist_df = ak.stock_zh_a_hist(symbol=symbol, period="daily", start_date=start_date, end_date=end_date, adjust="")
-	cal_dividend_inc_amount(dividend_detail_df, hist_df, begin_year, end_year, init_amount)
+	cal_dividend_inc_amount(dividend_detail_df, hist_df, begin_year, end_year, init_amount, fee_rate, min_fee)
 	year_dividend_detail = gen_year_dividend_detail(dividend_detail_df, begin_year, end_year)
 	# 历年分红
 	for year in range(begin_year, end_year+1):
@@ -229,6 +229,7 @@ def cal_stock_gains_riod(symbol, begin_year, end_year, init_amount=10000, divide
 			data[idx][3] = price
 			year += 1
 		last_year_row = row
+	print(last_year_row)
 	data[year-begin_year+1][3] = last_year_row['收盘']
 	for idx in range(1, len(idx_years)):
 		amount = data[idx-1][8]
@@ -239,6 +240,6 @@ def cal_stock_gains_riod(symbol, begin_year, end_year, init_amount=10000, divide
 	return df
 
 if __name__ == '__main__':
-	dividend_detail_df, hist_df = fetch_stock_dfs('600309', 2011, 2022)
-	print(cal_stock_gains_riod('600309', 2011, 2022, dividend_detail_df=dividend_detail_df, hist_df=hist_df))
-	# print(cal_stock_gains('600309', 2011, 2022, dividend_detail_df=dividend_detail_df, hist_df=hist_df))
+	dividend_detail_df, hist_df = fetch_stock_dfs('600309', 2011, 2023)
+	print(cal_stock_gains_riod('600309', 2011, 2023, dividend_detail_df=dividend_detail_df, hist_df=hist_df))
+	print(cal_stock_gains('600309', 2011, 2023, dividend_detail_df=dividend_detail_df, hist_df=hist_df))
