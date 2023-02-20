@@ -14,6 +14,7 @@ import dateutil.parser
 import sys
 import time
 import os
+import random
 
 # 注意：
 # ak.stock_history_dividend_detail 获取的数据是按时间降序排列的
@@ -232,7 +233,6 @@ def cal_stock_gains_riod(symbol, begin_year, end_year, init_amount=10000, divide
 			data[idx][3] = price
 			year += 1
 		last_year_row = row
-	print(last_year_row)
 	data[year-begin_year+1][3] = last_year_row['收盘']
 	for idx in range(1, len(idx_years)):
 		amount = data[idx-1][8]
@@ -245,14 +245,17 @@ def cal_stock_gains_riod(symbol, begin_year, end_year, init_amount=10000, divide
 def stock_gains_to_xlsx(symbol, begin_year, end_year, init_amount=10000, fee_rate=0.0005, min_fee=5, save_dir='./stock_gains/'):
 	info_em_df = ak.stock_individual_info_em(symbol=symbol)
 	if len(info_em_df) == 0:
-		print('stock symbol={0} not exists'.format(symbol))
+		print('股票代码 {0} 不存在'.format(symbol))
 		return
 	ss_date = info_em_df.loc[info_em_df['item'] == '上市时间'].iloc[0]['value']
 	stock_name = info_em_df.loc[info_em_df['item'] == '股票简称'].iloc[0]['value']
 	if not ss_date is datetime.date:
 		ss_date = hist_date_to_date(ss_date)
 	if ss_date.year >= begin_year:
-		print('stock symbol={0} 上市时间={1} 晚于 {2}-12-31'.format(symbol, ss_date, begin_year-1))
+		print('{0} {1} 上市时间为 {2} 晚于 {3}-12-31，不处理'.format(symbol, stock_name, ss_date, begin_year-1))
+		return
+	if stock_name.upper().find('ST') != -1:
+		print('{0} {1} ST股不处理'.format(symbol, stock_name, ss_date, begin_year-1))
 		return
 	dividend_detail_df, hist_df = fetch_stock_dfs(symbol, begin_year, end_year)
 	gains_df = cal_stock_gains(symbol, begin_year, end_year, init_amount, dividend_detail_df, hist_df)
@@ -262,35 +265,44 @@ def stock_gains_to_xlsx(symbol, begin_year, end_year, init_amount=10000, fee_rat
 	with pd.ExcelWriter('{0}{1}-{2}.xlsx'.format(save_dir, symbol, stock_name)) as xw:
 		gains_df.to_excel(xw, sheet_name='红利不复投')
 		gains_roid_df.to_excel(xw, sheet_name='红利复投')
-		xw.close()
-	print('save stock symbol={0} gains success'.format(symbol))
+	print('{0} {1} 保存成功'.format(symbol, stock_name))
 
 def all_stocks_gains_to_xlsx(begin_year, end_year, init_amount=10000, fee_rate=0.0005, min_fee=5, save_dir='./stock_gains/'):
 	print('获取沪A股票列表...')
 	sh_stocks_df = ak.stock_sh_a_spot_em()
-	print('获取沪A股票列表 done')
+	print('获取沪A股票列表 完成')
 	print('获取深A股票列表...')
 	sz_stocks_df = ak.stock_sz_a_spot_em()
-	print('获取深A股票列表 done')
+	print('获取深A股票列表 完成')
 	stock_count = len(sh_stocks_df) + len(sz_stocks_df)
 	print('计算保存沪A股票...')
 	p50 = max(len(sh_stocks_df)//50, 2)
 	for i in range(0, len(sh_stocks_df)):
-		stock_gains_to_xlsx(sh_stocks_df.loc[0]['代码'], begin_year, end_year, init_amount, fee_rate, min_fee, save_dir)
-		print("\r", end="")
-		print("progress: {0}/{1}: ".format(i+1, len(sh_stocks_df)), "▋" * (i // p50), end="")
-		sys.stdout.flush()
-		time.sleep(0.05)
-	print('计算保存沪A股票 done')
+		symbol = sh_stocks_df.loc[i]['代码']
+		try:
+			stock_gains_to_xlsx(symbol, begin_year, end_year, init_amount, fee_rate, min_fee, save_dir)
+		except e:
+			print('股票代码：{0} 保存失败'.format(symbol))
+		finally:
+			print("\r", end="")
+			print("进度: {0}/{1}: ".format(i+1, len(sh_stocks_df)), "▋" * (i // p50), end="")
+			sys.stdout.flush()
+		time.sleep(random.random()*10)
+	print('计算保存沪A股票 完成')
 	print('计算保存深A股票...')
 	p50 = max(len(sz_stocks_df)//50, 2)
 	for i in range(0, len(sz_stocks_df)):
-		stock_gains_to_xlsx(sz_stocks_df.loc[0]['代码'], begin_year, end_year, init_amount, fee_rate, min_fee, save_dir)
-		print("\r", end="")
-		print("progress: {0}/{1}: ".format(i+1, len(sz_stocks_df)), "▋" * (i // p50), end="")
-		sys.stdout.flush()
-		time.sleep(0.05)
-	print('计算保存深A股票 done')
+		symbol = sh_stocks_df.loc[i]['代码']
+		try:
+			stock_gains_to_xlsx(symbol, begin_year, end_year, init_amount, fee_rate, min_fee, save_dir)			
+		except e:
+			print('股票代码： {0} 保存失败'.format(symbol))
+		finally:
+			print("\r", end="")
+			print("进度: {0}/{1}: ".format(i+1, len(sh_stocks_df)), "▋" * (i // p50), end="")
+			sys.stdout.flush()
+		time.sleep(random.random()*10)
+	print('计算保存深A股票 完成')
 
 if __name__ == '__main__':
 	# dividend_detail_df, hist_df = fetch_stock_dfs('600309', 2011, 2023)
