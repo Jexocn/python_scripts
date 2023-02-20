@@ -275,20 +275,26 @@ def batch_stocks_gains_to_xlsx(stocks_df, begin_year, end_year, init_amount=1000
 	p50 = max(stock_count//50, 2)
 	for i in range(0, len(stocks_df)):
 		symbol = stocks_df.loc[i]['代码']
-		need_sleep = False
-		try:
-			need_sleep = stock_gains_to_xlsx(symbol, begin_year, end_year, init_amount, fee_rate, min_fee, save_dir)
-		except Exception as e:
-			print('股票代码：{0} 保存失败'.format(symbol))
-			need_sleep = True
-		finally:
-			print("\r", end="")
-			print("进度: {0}/{1}: ".format(i+1, stock_count), "▋" * (i // p50), end="")
-			sys.stdout.flush()
-		if need_sleep:
-			time.sleep(1+random.random())
-		else:
-			time.sleep(0.05)
+		need_sleep = 0.05
+		retry = 0
+		while retry < 3:
+			if retry > 0:
+				print('{0}秒后重试：{1}'.format(round(need_sleep, 1), retry))
+				time.sleep(need_sleep)
+			try:
+				need_sleep = 2+random.random()*3 if stock_gains_to_xlsx(symbol, begin_year, end_year, init_amount, fee_rate, min_fee, save_dir) else 0.05
+				break
+			except Exception as e:
+				print('股票代码：{0} 保存失败'.format(symbol))
+				print(e)
+				# 出现失败要停止
+				need_sleep = 5+5*random.random()
+			finally:
+				retry += 1
+		print("\r", end="")
+		print("进度: {0}/{1}: ".format(i+1, stock_count), "▋" * (i // p50), end="")
+		sys.stdout.flush()
+		time.sleep(need_sleep)
 
 def all_stocks_gains_to_xlsx(begin_year, end_year, init_amount=10000, fee_rate=0.0005, min_fee=5, save_dir='./stock_gains/'):
 	print('获取沪A股票列表...')
