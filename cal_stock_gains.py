@@ -78,12 +78,12 @@ def fetch_stock_dfs(symbol, begin_year, end_year):
 
 def cal_stock_gains(symbol, begin_year, end_year, init_amount=10000, dividend_detail_df=None, hist_df=None):
 	init_hist = get_init_hist(symbol, begin_year)
-	columns = ['10送x', '10派y', '10转z', '不复权收盘价', '送转股数', '红利', '红利累计', '总持股数量', '总持股市值']
+	columns = ['10送x', '10派y', '10转z', '不复权收盘价', '送转股数', '红利', '红利累计', '总持股数量', '总持股市值', '收益率', '年化收益率']
 	idx_years = [year for year in range(begin_year-1, end_year+1)]
 	if dividend_detail_df is None:
 		dividend_detail_df = ak.stock_history_dividend_detail(symbol=symbol, indicator="分红")
 	init_price = cal_init_price(begin_year, init_hist, dividend_detail_df)
-	data = [[0, 0, 0, init_price, 0, 0, 0, init_amount, init_amount*init_price]] + [[0 for i in range(0, len(columns))] for k in range(0, len(idx_years)-1)]
+	data = [[0, 0, 0, init_price, 0, 0, 0, init_amount, init_amount*init_price, 0, 0]] + [[0 for i in range(0, len(columns))] for k in range(0, len(idx_years)-1)]
 	year_dividend_detail = gen_year_dividend_detail(dividend_detail_df, begin_year, end_year)
 	# 历年分红
 	for year in range(begin_year, end_year+1):
@@ -121,6 +121,8 @@ def cal_stock_gains(symbol, begin_year, end_year, init_amount=10000, dividend_de
 		data[idx][5] = round(data[idx][1]/10*amount, 2)
 		data[idx][6] = data[idx-1][6] + data[idx][5]
 		data[idx][8] = data[idx][7]*data[idx][3]
+		data[idx][9] = round((data[idx][6]+data[idx][8])/data[0][8]-1, 4)
+		data[idx][10] = round((1+data[idx][9])**(1/idx)-1, 4)
 	df = pd.DataFrame(data, index=idx_years, columns=columns)
 	return df
 
@@ -186,12 +188,12 @@ def cal_dividend_inc_amount(dividend_detail_df, hist_df, begin_year, end_year, i
 
 def cal_stock_gains_riod(symbol, begin_year, end_year, init_amount=10000, dividend_detail_df=None, hist_df=None, fee_rate=0.0005, min_fee=5):
 	init_hist = get_init_hist(symbol, begin_year)
-	columns = ['10送x', '10派y', '10转z', '不复权收盘价', '送转股数', '红利', '复投股数', '剩余红利', '总持股数量', '总持股市值']
+	columns = ['10送x', '10派y', '10转z', '不复权收盘价', '送转股数', '红利', '复投股数', '剩余红利', '总持股数量', '总持股市值', '收益率', '年化收益率']
 	idx_years = [year for year in range(begin_year-1, end_year+1)]
 	if dividend_detail_df is None:
 		dividend_detail_df = ak.stock_history_dividend_detail(symbol=symbol, indicator="分红")
 	init_price = cal_init_price(begin_year, init_hist, dividend_detail_df)
-	data = [[0, 0, 0, init_price, 0, 0, 0, 0, init_amount, init_amount*init_price]] + [[0 for i in range(0, len(columns))] for k in range(0, len(idx_years)-1)]
+	data = [[0, 0, 0, init_price, 0, 0, 0, 0, init_amount, init_amount*init_price, 0, 0]] + [[0 for i in range(0, len(columns))] for k in range(0, len(idx_years)-1)]
 	if hist_df is None:
 		start_date = '%d0101' % (begin_year)
 		end_date = '%d1231' % (end_year)
@@ -233,6 +235,8 @@ def cal_stock_gains_riod(symbol, begin_year, end_year, init_amount=10000, divide
 		data[idx][4] = round((data[idx][0] + data[idx][2])/10*amount)
 		data[idx][8] = amount + data[idx][4] + data[idx][6]
 		data[idx][9] = data[idx][8]*data[idx][3]
+		data[idx][10] = round((data[idx][7]+data[idx][9])/data[0][9]-1, 4)
+		data[idx][11] = round((1+data[idx][10])**(1/idx)-1, 4)
 	df = pd.DataFrame(data, index=idx_years, columns=columns)
 	return df
 
@@ -282,7 +286,7 @@ def batch_stocks_gains_to_xlsx(stocks_df, begin_year, end_year, init_amount=1000
 			print("进度: {0}/{1}: ".format(i+1, stock_count), "▋" * (i // p50), end="")
 			sys.stdout.flush()
 		if need_sleep:
-			time.sleep(random.random()*10)
+			time.sleep(1+random.random())
 		else:
 			time.sleep(0.05)
 
