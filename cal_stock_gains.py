@@ -318,6 +318,9 @@ def all_stocks_gains_to_xlsx(begin_year, end_year, init_amount=10000, fee_rate=0
 	print('计算保存深A股票...')
 	batch_stocks_gains_to_xlsx(sz_stocks_df, begin_year, end_year, init_amount, fee_rate, min_fee, save_dir, rank_df)
 	print('计算保存深A股票 完成')
+	with pd.ExcelWriter('{0}/收益排行.xlsx'.format(save_dir)) as xw:
+		rank_df.sort_values(by='不复投年化', ascending=False).to_excel(xw, sheet_name='红利不复投')
+		rank_df.sort_values(by='复投年化', ascending=False).to_excel(xw, sheet_name='红利复投')
 
 if __name__ == '__main__':
 	# dividend_detail_df, hist_df = fetch_stock_dfs('600309', 2011, 2023)
