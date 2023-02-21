@@ -20,7 +20,15 @@ import random
 # ak.stock_history_dividend_detail 获取的数据是按时间降序排列的
 
 def hist_date_to_date(hist_date):
-	return dateutil.parser.parse(str(hist_date)).date()
+	ret_date = None
+	try:
+		ret_date = dateutil.parser.parse(str(hist_date)).date()
+	except:
+		pass
+	finally:
+		pass
+	return ret_date
+
 
 def date_to_hist_date(date):
 	return '%d-%02d-%02d' % (date.year, date.month, date.day)
@@ -247,13 +255,17 @@ def stock_gains_to_xlsx(symbol, begin_year, end_year, init_amount=10000, fee_rat
 		return False
 	ss_date = info_em_df.loc[info_em_df['item'] == '上市时间'].iloc[0]['value']
 	stock_name = info_em_df.loc[info_em_df['item'] == '股票简称'].iloc[0]['value']
+	total_value = info_em_df.loc[info_em_df['item'] == '总市值'].iloc[0]['value']
 	if not ss_date is datetime.date:
 		ss_date = hist_date_to_date(ss_date)
+	if ss_date is None:
+		print('{0} {1} 未上市，不处理'.format(symbol, stock_name, ss_date, begin_year-1))
+		return False
 	if ss_date.year >= begin_year:
 		print('{0} {1} 上市时间为 {2} 晚于 {3}-12-31，不处理'.format(symbol, stock_name, ss_date, begin_year-1))
 		return False
-	if stock_name.upper().find('ST') != -1 or stock_name.find('退市') != -1:
-		print('{0} {1} ST股、退市股不处理'.format(symbol, stock_name, ss_date, begin_year-1))
+	if stock_name.upper().find('ST') != -1 or stock_name.find('退市') != -1 or re.search('^\d+(.\d+)?$', str(total_value)) is None:
+		print('{0} {1} ST股、退市股不处理'.format(symbol, stock_name))
 		return False
 	save_fname = '{0}{1}-{2}.xlsx'.format(save_dir, symbol, stock_name)
 	if os.path.exists(save_fname):
