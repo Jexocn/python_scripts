@@ -154,13 +154,13 @@ def cal_dividend_inc_amount(dividend_detail_df, hist_df, begin_year, end_year, i
 					total_px = px + px_remain
 					sz_inc = round(amount*(dd_row['送股'] + dd_row['转增'])/10)
 					inc = math.floor(total_px/(price*100))*100
-					total_price = inc*price
-					fee = max(round(total_price*fee_rate, 2), min_fee)
-					px_remain = total_px - inc*price - fee
+					total_price = inc*price if inc > 0 else 0
+					fee = max(round(total_price*fee_rate, 2), min_fee) if inc > 0 else 0
+					px_remain = total_px - total_price - fee
 					while px_remain < 0:
 						inc -= 100
-						total_price = inc*price
-						fee = max(round(total_price*fee_rate, 2), min_fee)
+						total_price = inc*price if inc > 0 else 0
+						fee = max(round(total_price*fee_rate, 2), min_fee) if inc > 0 else 0
 						px_remain = total_px - total_price - fee
 					amount += inc + sz_inc
 					dividend_detail_df.loc[dd_idx, 'px'] = px
