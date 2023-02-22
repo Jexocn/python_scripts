@@ -5,16 +5,21 @@ Date: 2023/2/17 17::41
 Desc: 计算A股股票收益情况
 """
 
+import pandas as pd
+import datetime
+import re
+import math
+import dateutil.parser
+
 def str_to_date(hist_date):
 	ret_date = None
 	try:
 		ret_date = dateutil.parser.parse(str(hist_date)).date()
-	except:
+	except Exception as e:
 		pass
 	finally:
 		pass
 	return ret_date
-
 
 def date_to_str(date):
 	return '%d-%02d-%02d' % (date.year, date.month, date.day)
@@ -54,6 +59,7 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 		fee_rate 交易费率
 		min_fee 最小交易费
 		note: 
+			分红不复投，配股处理？
 			分红复投： 
 				上市第一天不买入；
 				交易日涨停不买入，跌停不卖出，否则按策略买入或卖出；
@@ -121,8 +127,8 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 					data.append([remain_cash, fh_cash, value, amount, rate, hist_date, buy_amount, 0, 0, 0, 0])
 			else:
 				buy_amount = 0
-				if remain_cash > 0 and pd.notna(row['开盘']):
-					# TODO: roid == 1 涨停不买入、跌停不卖出
+				if remain_cash > 0 and pd.notna(row['开盘']) and (amount == 0 or roid > 0):
+					# TODO: 涨停不买入、跌停不卖出
 					buy_amount, buy_cost, fee, remain_cash = cal_buy_amount(remain_cash, row['开盘'], fee_rate, min_fee)
 				sg_amount = 0
 				zz_amount = 0
@@ -143,11 +149,8 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 					if roid != 2:
 						dividents_row = dividents_received[hist_date]
 						if pd.notna(dividents_row['派息比例']):
-							fh_add_cash = round(amount/10*dividents_row['派息比例'], 2)
-							fh_cash -= fh_add_cash
-							remain_cash += fh_add_cash
-							fh_add_cash = 0
-						assert(math.abs(fh_cash) < 0.001)
+							remain_cash += fh_cash
+							fh_cash = 0
 				amount += zz_amount + sg_amount + buy_amount
 				value = 0
 				if amount > 0:
