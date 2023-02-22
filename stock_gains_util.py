@@ -19,6 +19,18 @@ def str_to_date(hist_date):
 def date_to_str(date):
 	return '%d-%02d-%02d' % (date.year, date.month, date.day)
 
+def cell_to_number(cell):
+	if pd.isna(cell):
+		return 0
+	ret_num = 0
+	try:
+		ret_num = float(cell)
+	except:
+		pass
+	finally:
+		pass
+	return ret_num
+
 def cal_buy_amount(cash, price, fee_rate, min_fee):
 	buy_amount = math.floor(cash/(price*100))*100
 	while True:
@@ -38,21 +50,14 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 		begin_date 计算起始日期
 		end_date 计算截止日期
 		init_amount 初始持股数量
-		roid 分红复投类型 [0 = 分红不复投, 1 = 分红实际复投(分红实际到账日复投), 2 = 分红理论复投(分红除权日复投)]
+		roid 分红复投类型 [0 = 分红不复投, 1 = 分红复投(分红实际到账日复投)]
 		fee_rate 交易费率
 		min_fee 最小交易费
 		note: 
 			分红复投： 
-			roid = 1:
 				上市第一天不买入；
 				交易日涨停不买入，跌停不卖出，否则按策略买入或卖出；
 				账户收到分红后，下一个交易日以开盘价买入；
-				如果遇到配股，不参与配股（配股登记日前收盘价卖出，除权日开盘价买入）；
-			roid = 2:
-				为保证以任意日期为起点计算一段时间的收益率的准确性
-				上市第一天不买入；
-				忽略涨跌停影响
-				分红除权日分红按收盘价转换为相应股数
 				如果遇到配股，不参与配股（配股登记日前收盘价卖出，除权日开盘价买入）；
 	'''
 	dividents_ex_right = {}	# 分红除权日
@@ -108,15 +113,19 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 				if i == 0:
 					amount = 0
 					remain_cash = init_value
-				buy_amount, buy_cost, fee, remain_cash = cal_buy_amount(remain_cash, row['开盘'], fee_rate, min_fee)
-				amount = buy_amount
-				value = row['收盘']*amount
-				rate = round(((value+remain_cash+fh_cash)/init_value-1)*100, 2)
-				data.append([remain_cash, fh_cash, value, amount, rate, hist_date, buy_amount, 0, 0, 0])
+				if pd.isna(row['开盘']):
+					buy_amount, buy_cost, fee, remain_cash = cal_buy_amount(remain_cash, row['开盘'], fee_rate, min_fee)
+					amount = buy_amount
+					value = row['收盘']*amount
+					rate = round(((value+remain_cash+fh_cash)/init_value-1)*100, 2)
+					data.append([remain_cash, fh_cash, value, amount, rate, hist_date, buy_amount, 0, 0, 0])
 			else:
+				buy_amount = 0
+				if remain_cash > 0 and pd.isna(row['开盘']):
+					# TODO: roid == 1 涨停不买入、跌停不卖出
+					buy_amount, buy_cost, fee, remain_cash = cal_buy_amount(remain_cash, row['开盘'], fee_rate, min_fee)
 				zz_amount = 0
 				fh_add_cash = 0
-				buy_amount = 0
 				if hist_date in dividents_ex_right:
 					dividents_row = dividents_ex_right[hist_date]
 					if pd.notna(dividents_row['送股比例']):
@@ -125,10 +134,8 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 						zz_amount += round(amount/10*dividents_row['转增比例'])
 					if pd.notna(dividents_row['派息比例']):
 						fh_add_cash = round(amount/10*dividents_row['派息比例'], 2)
-					if hist_date in dividents_received or roid == 2:
+					if hist_date in dividents_received:
 						remain_cash += fh_add_cash
-						if roid == 2:
-							buy_amount, buy_cost, fee, remain_cash = cal_buy_amount(remain_cash, row['收盘'], fee_rate, min_fee)
 					else:
 						fh_cash += fh_add_cash
 						fh_add_cash = 0
@@ -140,11 +147,9 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 							fh_cash -= fh_add_cash
 							remain_cash += fh_add_cash
 						assert(math.abs(fh_cash) < 0.001)
-				elif remain_cash > 0:
-					# TODO: roid == 1 涨停不买入、跌停不卖出
-					buy_amount, buy_cost, fee, remain_cash = cal_buy_amount(remain_cash, row['开盘'], fee_rate, min_fee)
-				amount += zz_amount + buy_amount
-				value = row['收盘']*amount
-				rate = round(((value+remain_cash+fh_cash)/init_value-1)*100, 2)
-				data.append([remain_cash, fh_cash, value, amount, rate, hist_date, buy_amount, 0, zz_amount, fh_add_cash])
+				if buy_amount > 0 or zz_amount > 0 or fh_add_cash > 0 or pd.isna(row['收盘']):
+					amount += zz_amount + buy_amount
+					value = row['收盘']*amount
+					rate = round(((value+remain_cash+fh_cash)/init_value-1)*100, 2)
+					data.append([remain_cash, fh_cash, value, amount, rate, hist_date, buy_amount, 0, zz_amount, fh_add_cash])
 	return pd.DataFrame(data, columns=columns)
