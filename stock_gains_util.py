@@ -147,9 +147,15 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 							fh_cash -= fh_add_cash
 							remain_cash += fh_add_cash
 						assert(math.abs(fh_cash) < 0.001)
-				if buy_amount > 0 or zz_amount > 0 or fh_add_cash > 0 or pd.isna(row['收盘']):
-					amount += zz_amount + buy_amount
-					value = row['收盘']*amount
-					rate = round(((value+remain_cash+fh_cash)/init_value-1)*100, 2)
-					data.append([remain_cash, fh_cash, value, amount, rate, hist_date, buy_amount, 0, zz_amount, fh_add_cash])
+				amount += zz_amount + buy_amount
+				value = 0
+				if amount > 0:
+					if pd.isna(row['收盘']):
+						value = row['收盘']*amount
+					elif i > 0:
+						value = round(data[i-1][2]/data[i-1][3]*amount, 2)
+					else:
+						value = round(init_price*amount, 2)
+				rate = round(((value+remain_cash+fh_cash)/init_value-1)*100, 2)
+				data.append([remain_cash, fh_cash, value, amount, rate, hist_date, buy_amount, 0, zz_amount, fh_add_cash])
 	return pd.DataFrame(data, columns=columns)
