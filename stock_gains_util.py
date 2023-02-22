@@ -100,6 +100,7 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 	amount = init_amount
 	remain_cash = init_cash 	# 实际到账现金
 	fh_cash = 0
+	sell_cash = 0
 	for i in range(0, len(hist_df)):
 		row = hist_df.iloc[i]
 		hist_date = str_to_date(row['日期'])
@@ -112,7 +113,6 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 				amount = 0
 				remain_cash += sell_cash
 				rate = round(((remain_cash+fh_cash)/init_value-1)*100, 2)
-				remain_cash += sell_cash
 				data.append([remain_cash, fh_cash, 0, 0, rate, hist_date, 0, sell_amount, 0, 0, 0])
 			elif hist_date in rights_issue_ex_right:
 				assert(amount == 0 or i == 0)
@@ -120,7 +120,9 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 					amount = 0
 					remain_cash = init_value
 				if pd.notna(row['开盘']):
-					buy_amount, buy_cost, fee, remain_cash = cal_buy_amount(remain_cash, row['开盘'], fee_rate, min_fee)
+					buy_amount, buy_cost, fee, sell_cash = cal_buy_amount(remain_cash if roid > 0 else sell_cash, row['开盘'], fee_rate, min_fee)
+					remain_cash -= buy_cost + fee
+					sell_cash = 0
 					amount = buy_amount
 					value = row['收盘']*amount
 					rate = round(((value+remain_cash+fh_cash)/init_value-1)*100, 2)
@@ -129,7 +131,10 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 				buy_amount = 0
 				if remain_cash > 0 and pd.notna(row['开盘']) and (amount == 0 or roid > 0):
 					# TODO: 涨停不买入、跌停不卖出
-					buy_amount, buy_cost, fee, remain_cash = cal_buy_amount(remain_cash, row['开盘'], fee_rate, min_fee)
+					buy_amount, buy_cost, fee, sell_cash = cal_buy_amount(remain_cash if roid > 0 or sell_cash == 0 else sell_cash,
+						row['开盘'], fee_rate, min_fee)
+					remain_cash -= buy_cost + fee
+					sell_cash = 0
 				sg_amount = 0
 				zz_amount = 0
 				fh_add_cash = 0
