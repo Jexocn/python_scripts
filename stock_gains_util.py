@@ -89,7 +89,7 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 		if not received_date is None:
 			rights_issue_record[record_date] = row
 	init_value = init_amount*init_price + init_cash
-	columns = ['现金', '未到账分红', '总市值', '总持仓', '总收益率', '交易日期', '买入', '卖出', '转增', '分红']
+	columns = ['现金', '未到账派息', '总市值', '总持仓', '总收益率', '交易日期', '买入', '卖出', '转增', '送股', '派息']
 	data = []
 	amount = init_amount
 	remain_cash = init_cash 	# 实际到账现金
@@ -107,7 +107,7 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 				remain_cash += sell_cash
 				rate = round(((remain_cash+fh_cash)/init_value-1)*100, 2)
 				remain_cash += sell_cash
-				data.append([remain_cash, fh_cash, 0, 0, rate, hist_date, 0, sell_amount, 0, 0])
+				data.append([remain_cash, fh_cash, 0, 0, rate, hist_date, 0, sell_amount, 0, 0, 0])
 			elif hist_date in rights_issue_ex_right:
 				assert(amount == 0 or i == 0)
 				if i == 0:
@@ -118,20 +118,21 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 					amount = buy_amount
 					value = row['收盘']*amount
 					rate = round(((value+remain_cash+fh_cash)/init_value-1)*100, 2)
-					data.append([remain_cash, fh_cash, value, amount, rate, hist_date, buy_amount, 0, 0, 0])
+					data.append([remain_cash, fh_cash, value, amount, rate, hist_date, buy_amount, 0, 0, 0, 0])
 			else:
 				buy_amount = 0
 				if remain_cash > 0 and pd.isna(row['开盘']):
 					# TODO: roid == 1 涨停不买入、跌停不卖出
 					buy_amount, buy_cost, fee, remain_cash = cal_buy_amount(remain_cash, row['开盘'], fee_rate, min_fee)
+				sg_amount = 0
 				zz_amount = 0
 				fh_add_cash = 0
 				if hist_date in dividents_ex_right:
 					dividents_row = dividents_ex_right[hist_date]
 					if pd.notna(dividents_row['送股比例']):
-						zz_amount += round(amount/10*dividents_row['送股比例'])
+						sg_amount = round(amount/10*dividents_row['送股比例'])
 					if pd.notna(dividents_row['转增比例']):
-						zz_amount += round(amount/10*dividents_row['转增比例'])
+						zz_amount = round(amount/10*dividents_row['转增比例'])
 					if pd.notna(dividents_row['派息比例']):
 						fh_add_cash = round(amount/10*dividents_row['派息比例'], 2)
 					if hist_date in dividents_received:
@@ -147,7 +148,7 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 							fh_cash -= fh_add_cash
 							remain_cash += fh_add_cash
 						assert(math.abs(fh_cash) < 0.001)
-				amount += zz_amount + buy_amount
+				amount += zz_amount + sg_amount + buy_amount
 				value = 0
 				if amount > 0:
 					if pd.isna(row['收盘']):
@@ -157,5 +158,5 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 					else:
 						value = round(init_price*amount, 2)
 				rate = round(((value+remain_cash+fh_cash)/init_value-1)*100, 2)
-				data.append([remain_cash, fh_cash, value, amount, rate, hist_date, buy_amount, 0, zz_amount, fh_add_cash])
+				data.append([remain_cash, fh_cash, value, amount, rate, hist_date, buy_amount, 0, zz_amount, sg_amount, fh_add_cash])
 	return pd.DataFrame(data, columns=columns)
