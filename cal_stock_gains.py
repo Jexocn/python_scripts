@@ -15,6 +15,7 @@ import sys
 import time
 import os
 import random
+import stock_gains_util as util
 
 # 注意：
 # ak.stock_history_dividend_detail 获取的数据是按时间降序排列的
@@ -339,4 +340,5 @@ if __name__ == '__main__':
 	# print(cal_stock_gains_riod('600309', 2011, 2023, dividend_detail_df=dividend_detail_df, hist_df=hist_df))
 	# print(cal_stock_gains('600309', 2011, 2023, dividend_detail_df=dividend_detail_df, hist_df=hist_df))
 	# fetch_stocks_and_cal_gains()
-	all_stocks_gains_to_xlsx(2011, 2022)
+	# all_stocks_gains_to_xlsx(2011, 2022)
+	print(util)
