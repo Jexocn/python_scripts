@@ -46,6 +46,18 @@ def cal_buy_amount(cash, price, fee_rate, min_fee):
 			return buy_amount, buy_cost, fee, remain_cash
 		buy_amount -= 100
 
+def is_rights_issue_sell_date(hist_date, next_hist_date, rights_issue_df):
+	if hist_date is None or next_hist_date is None:
+		return False
+	for i in range(0, len(rights_issue_df)):
+		row = rights_issue_df.iloc[i]
+		record_date = row['股权登记日']
+		if not record_date is datetime.date:
+			record_date = str_to_date(record_date)
+		if not record_date is None and hist_date <= record_date and next_hist_date > record_date:
+			return True
+	return False
+
 def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_date, end_date, init_amount=10000, init_cash=0, roid=0, fee_rate=0, min_fee=0):
 	'''
 		hist_df 历史行情数据 ak.stock_zh_a_hist(symbol="000001", period="daily", start_date="20170301", end_date='20210907', adjust="")
@@ -80,20 +92,7 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 			dividents_ex_right[ex_date] = row
 		if not received_date is None:
 			dividents_received[received_date] = row
-	rights_issue_record = {}	# 配股股权登记日
-	rights_issue_ex_right = {}	# 配股除权日
-	for i in range(0, len(rights_issue_df)):
-		row = rights_issue_df.iloc[i]
-		ex_date = row['除权日']
-		record_date = row['股权登记日']
-		if not ex_date is datetime.date:
-			ex_date = str_to_date(ex_date)
-		if not record_date is datetime.date:
-			record_date = str_to_date(record_date)
-		if not ex_date is None:
-			rights_issue_ex_right[ex_date] = row
-		if not received_date is None:
-			rights_issue_record[record_date] = row
+	print('====', rights_issue_df)
 	init_value = init_amount*init_price + init_cash
 	columns = ['现金', '未到账派息', '总市值', '总持仓', '总收益率', '交易日期', '买入', '卖出', '转增', '送股', '派息']
 	data = []
@@ -149,10 +148,12 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 
 	for i in range(0, len(hist_df)):
 		row = hist_df.iloc[i]
+		next_row = hist_df.iloc[i+1] if i+1 < len(hist_df) else None
 		hist_date = str_to_date(row['日期'])
+		next_hist_date = str_to_date(next_row['日期']) if not next_row is None else None
 		if hist_date >= begin_date and hist_date <= end_date:
 			fill_no_hist_data(hist_date)
-			if hist_date in rights_issue_record:
+			if is_rights_issue_sell_date(hist_date, next_hist_date, rights_issue_df):
 				sell_amount = amount
 				sell_cash = row['收盘']*sell_amount
 				fee = max(round(sell_cash*fee_rate, 2), min_fee)
@@ -161,29 +162,17 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 				remain_cash += sell_cash
 				rate = round(((remain_cash+fh_cash)/init_value-1)*100, 2)
 				data.append([remain_cash, fh_cash, 0, 0, rate, hist_date, 0, sell_amount, 0, 0, 0])
-				# print('配股股权登记卖出', sell_amount, sell_cash, fee)
-			elif hist_date in rights_issue_ex_right:
-				assert(amount == 0 or i == 0)
-				if i == 0:
-					amount = 0
-					remain_cash = init_value
-				if pd.notna(row['开盘']):
-					buy_amount, buy_cost, fee, sell_cash = cal_buy_amount(remain_cash if roid > 0 else sell_cash, row['开盘'], fee_rate, min_fee)
-					remain_cash -= buy_cost + fee
-					sell_cash = 0
-					amount = buy_amount
-					value = row['收盘']*amount
-					rate = round(((value+remain_cash+fh_cash)/init_value-1)*100, 2)
-					data.append([remain_cash, fh_cash, value, amount, rate, hist_date, buy_amount, 0, 0, 0, 0])
-					# print('配股除权买入', buy_amount, buy_cost, fee)
+				# print('配股股权登记日前卖出', hist_date, sell_amount, sell_cash, fee)
 			else:
 				buy_amount = 0
 				if remain_cash > 0 and pd.notna(row['开盘']) and (sell_cash > 0 or roid > 0):
 					# TODO: 涨停不买入、跌停不卖出
-					buy_amount, buy_cost, fee, sell_cash = cal_buy_amount(remain_cash if roid > 0 or sell_cash == 0 else sell_cash,
+					buy_amount, buy_cost, fee, tmp_remain_cash = cal_buy_amount(remain_cash if roid > 0 or sell_cash == 0 else sell_cash,
 						row['开盘'], fee_rate, min_fee)
 					remain_cash -= buy_cost + fee
-					sell_cash = 0
+					if sell_cash > 0:
+						# print('配股除权买入', hist_date, buy_amount, buy_cost, fee, sell_cash, remain_cash)
+						sell_cash = 0
 				sg_amount = 0
 				zz_amount = 0
 				fh_add_cash = 0
