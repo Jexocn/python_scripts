@@ -101,10 +101,57 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 	remain_cash = init_cash 	# 实际到账现金
 	fh_cash = 0
 	sell_cash = 0
+	last_hist_date = begin_date - datetime.timedelta(days=1)
+
+	# 填充无历史交易的送分红送转信息
+	def fill_no_hist_data(hist_date):
+		nonlocal remain_cash, fh_cash, amount, last_hist_date
+		fill_end_date = hist_date - datetime.timedelta(days=1)
+		fill_date = last_hist_date + datetime.timedelta(days=1)
+		last_hist_date = hist_date
+		while fill_date <= fill_end_date:
+			sg_amount = 0
+			zz_amount = 0
+			fh_add_cash = 0
+			has_divident = False
+			if fill_date in dividents_ex_right:
+				dividents_row = dividents_ex_right[fill_date]
+				if pd.notna(dividents_row['送股比例']):
+					sg_amount = round(amount/10*dividents_row['送股比例'])
+				if pd.notna(dividents_row['转增比例']):
+					zz_amount = round(amount/10*dividents_row['转增比例'])
+				if pd.notna(dividents_row['派息比例']):
+					fh_add_cash = round(amount/10*dividents_row['派息比例'], 2)
+				if fill_date in dividents_received:
+					remain_cash += fh_add_cash
+				else:
+					fh_cash += fh_add_cash
+				has_divident = True
+			elif fill_date in dividents_received:
+				dividents_row = dividents_received[fill_date]
+				if pd.notna(dividents_row['派息比例']):
+					remain_cash += fh_cash
+					fh_cash = 0
+				has_divident = True
+			if has_divident:
+				amount += zz_amount + sg_amount
+				value = 0
+				if amount > 0:
+					if pd.notna(row['收盘']):
+						value = row['收盘']*amount
+					elif i > 0:
+						value = round(data[i-1][2]/data[i-1][3]*amount, 2)
+					else:
+						value = round(init_price*amount, 2)
+				rate = round(((value+remain_cash+fh_cash)/init_value-1)*100, 2)
+				data.append([remain_cash, fh_cash, value, amount, rate, fill_date, 0, 0, zz_amount, sg_amount, fh_add_cash])
+			fill_date = fill_date + datetime.timedelta(days=1)
+
 	for i in range(0, len(hist_df)):
 		row = hist_df.iloc[i]
 		hist_date = str_to_date(row['日期'])
 		if hist_date >= begin_date and hist_date <= end_date:
+			fill_no_hist_data(hist_date)
 			if hist_date in rights_issue_record:
 				sell_amount = amount
 				sell_cash = row['收盘']*sell_amount
@@ -153,11 +200,10 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 					else:
 						fh_cash += fh_add_cash
 				elif hist_date in dividents_received:
-					if roid != 2:
-						dividents_row = dividents_received[hist_date]
-						if pd.notna(dividents_row['派息比例']):
-							remain_cash += fh_cash
-							fh_cash = 0
+					dividents_row = dividents_received[hist_date]
+					if pd.notna(dividents_row['派息比例']):
+						remain_cash += fh_cash
+						fh_cash = 0
 				amount += zz_amount + sg_amount + buy_amount
 				value = 0
 				if amount > 0:
