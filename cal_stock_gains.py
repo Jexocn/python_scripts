@@ -221,9 +221,9 @@ def stock_gains_to_xlsx(symbol, begin_year, end_year, init_amount=10000, fee_rat
 			gains_df, gains_roid_df = saved_dfs['红利不复投'], saved_dfs['红利复投']
 			rank_df.loc[len(rank_df)] = [symbol, stock_name, gains_df.iloc[len(gains_df)-1]['年化收益率'], gains_roid_df.iloc[len(gains_df)-1]['年化收益率']]
 		return False
-	dividend_detail_df, hist_df = fetch_stock_dfs(symbol, begin_year, end_year)
-	gains_df = cal_stock_gains(symbol, begin_year, end_year, init_amount, dividend_detail_df, hist_df)
-	gains_roid_df = cal_stock_gains_riod(symbol, begin_year, end_year, init_amount, dividend_detail_df, hist_df, fee_rate, min_fee)
+	dividend_detail_df, hist_df, rights_issue_df = fetch_stock_dfs(symbol, begin_year, end_year)
+	gains_df = cal_stock_gains(symbol, begin_year, end_year, init_amount, dividend_detail_df, hist_df, rights_issue_df)
+	gains_roid_df = cal_stock_gains_riod(symbol, begin_year, end_year, init_amount, dividend_detail_df, hist_df, rights_issue_df, fee_rate, min_fee)
 	if not os.path.exists(save_dir):
 		os.makedirs(save_dir)
 	with pd.ExcelWriter('{0}{1}-{2}.xlsx'.format(save_dir, symbol, stock_name)) as xw:
