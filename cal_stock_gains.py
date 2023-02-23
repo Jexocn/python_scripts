@@ -57,11 +57,20 @@ def cal_init_price(begin_year, init_hist, dividend_detail_df):
 	return init_price
 
 def fetch_stock_dfs(symbol, begin_year, end_year):
-	dividend_detail_df = ak.stock_dividents_cninfo(symbol=symbol)
+	dividend_detail_df = None
+	try:
+		dividend_detail_df = ak.stock_dividents_cninfo(symbol=symbol)
+	finally:
+		pass
+	if dividend_detail_df is None:
+		try:
+			dividend_detail_df = ak.stock_history_dividend_detail(symbol=symbol, indicator="分红")
+			dividend_detail_df = util.stock_dividents_sina_to_cinfo(dividend_detail_df)
+		finally:
+			pass
 	rights_issue_df = ak.stock_history_dividend_detail(symbol=symbol, indicator="配股")
 	start_date = date_to_str(begin_year, '') if isinstance(begin_year, datetime.date) else '%d0101' % (begin_year)
 	end_date = date_to_str(end_year, '') if isinstance(end_year, datetime.date) else '%d1231' % (end_year)
-	print('++++', start_date, end_date)
 	hist_df = ak.stock_zh_a_hist(symbol=symbol, period="daily", start_date=start_date, end_date=end_date, adjust="")
 	return dividend_detail_df, hist_df, rights_issue_df
 

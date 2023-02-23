@@ -3,6 +3,9 @@
 """
 Date: 2023/2/17 17::41
 Desc: 计算A股股票收益情况
+
+akshare 升级：
+pip install akshare --upgrade -i https://pypi.org/simple
 """
 
 import pandas as pd
@@ -61,6 +64,24 @@ def is_rights_issue_sell_date(hist_date, next_hist_date, rights_issue_df):
 				# rights_issue_df 是按日期倒序排列的
 				return False
 	return False
+
+def stock_dividents_sina_to_cinfo(sina_dividents_df, detail_dfs=None):
+	columns = ['送股比例', '转增比例', '派息比例', '股权登记日', '除权日', '派息日']
+	data = []
+	sina_columns = ['送股', '转增', '派息', '股权登记日', '除权除息日']
+	for i in range(0, len(sina_dividents_df)):
+		row = sina_dividents_df.iloc[i]
+		data_row = [row[column] for column in sina_columns]
+		px_date = row['除权除息日']
+		if not detail_dfs is None and row['公告日期'] in detail_dfs:
+			detail_df = detail_dfs[row['公告日期']]
+			for j in range(0, len(detail_df)):
+				detail_row = detail_df.iloc[i]
+				if detail_row['item'] == '红利/配股起始日（送、转股到账日）':
+					px_date = detail_row['value']
+					break
+		data.append(data_row + [px_date])
+	return pd.DataFrame(data, columns=columns)
 
 def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_date, end_date, init_amount=10000, init_cash=0, roid=0, fee_rate=0, min_fee=0):
 	'''
