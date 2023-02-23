@@ -59,8 +59,9 @@ def cal_init_price(begin_year, init_hist, dividend_detail_df):
 def fetch_stock_dfs(symbol, begin_year, end_year):
 	dividend_detail_df = ak.stock_dividents_cninfo(symbol=symbol)
 	rights_issue_df = ak.stock_history_dividend_detail(symbol=symbol, indicator="配股")
-	start_date = '%d0101' % (begin_year)
-	end_date = '%d1231' % (end_year)
+	start_date = date_to_str(begin_year, '') if isinstance(begin_year, datetime.date) else '%d0101' % (begin_year)
+	end_date = date_to_str(end_year, '') if isinstance(end_year, datetime.date) else '%d1231' % (end_year)
+	print('++++', start_date, end_date)
 	hist_df = ak.stock_zh_a_hist(symbol=symbol, period="daily", start_date=start_date, end_date=end_date, adjust="")
 	return dividend_detail_df, hist_df, rights_issue_df
 
@@ -68,7 +69,7 @@ def fill_data_dividents(data, dividend_detail_df, begin_year, end_year):
 	for i in range(0, len(dividend_detail_df)):
 		row = dividend_detail_df.iloc[i]
 		ex_date = row['除权日']
-		if not ex_date is datetime.date:
+		if not isinstance(ex_date, datetime.date):
 			ex_date = str_to_date(ex_date)
 		if not ex_date is None and ex_date.year >= begin_year and ex_date.year <= end_year:
 			idx = ex_date.year - begin_year + 1
@@ -202,7 +203,7 @@ def stock_gains_to_xlsx(symbol, begin_year, end_year, init_amount=10000, fee_rat
 	ss_date = info_em_df.loc[info_em_df['item'] == '上市时间'].iloc[0]['value']
 	stock_name = info_em_df.loc[info_em_df['item'] == '股票简称'].iloc[0]['value']
 	total_value = info_em_df.loc[info_em_df['item'] == '总市值'].iloc[0]['value']
-	if not ss_date is datetime.date:
+	if not isinstance(ss_date, datetime.date):
 		ss_date = str_to_date(ss_date)
 	if ss_date is None:
 		print('{0} {1} 未上市，不处理'.format(symbol, stock_name, ss_date, begin_year-1))
@@ -280,8 +281,22 @@ def all_stocks_gains_to_xlsx(begin_year, end_year, init_amount=10000, fee_rate=0
 		rank_df.sort_values(by='不复投年化', ascending=False).to_excel(xw, sheet_name='红利不复投')
 		rank_df.sort_values(by='复投年化', ascending=False).to_excel(xw, sheet_name='红利复投')
 
+def cal_stock_indicator_gains(symbol, begin_date=None, end_date=None):
+	if not (begin_date is None or isinstance(begin_date, datetime.date)):
+		begin_date = str_to_date(begin_date)
+	if not (end_date is None or isinstance(end_date, datetime.date)):
+		end_date = str_to_date(end_date)
+	indicator_df = ak.stock_a_lg_indicator(symbol=symbol)
+	hist_begin_date = indicator_df.iloc[0]['trade_date']
+	hist_end_date = indicator_df.iloc[len(indicator_df)-1]['trade_date']
+	dividend_detail_df, hist_df, rights_issue_df = fetch_stock_dfs(symbol, hist_begin_date+datetime.timedelta(days=1), hist_end_date)
+	gains_df = util.cal_a_stock_gains(hist_df, dividend_detail_df, rights_issue_df, 0, hist_begin_date, hist_end_date, 0, 100000, 1)
+	return util.cal_a_indicator_gains(gains_df, indicator_df, 'm1', begin_date, end_date)
+
 if __name__ == '__main__':
-	# dividend_detail_df, hist_df, rights_issue_df = fetch_stock_dfs('600118', 2011, 2023)
-	# print(cal_stock_gains_riod('600118', 2011, 2023, dividend_detail_df=dividend_detail_df, hist_df=hist_df, rights_issue_df=rights_issue_df))
-	# print(cal_stock_gains('600118', 2011, 2023, dividend_detail_df=dividend_detail_df, hist_df=hist_df, rights_issue_df=rights_issue_df))
-	all_stocks_gains_to_xlsx(2011, 2022)
+	# dividend_detail_df, hist_df, rights_issue_df = fetch_stock_dfs('600309', 2011, 2023)
+	# print(cal_stock_gains_riod('600309', 2011, 2023, dividend_detail_df=dividend_detail_df, hist_df=hist_df, rights_issue_df=rights_issue_df))
+	# print(cal_stock_gains('600309', 2011, 2023, dividend_detail_df=dividend_detail_df, hist_df=hist_df, rights_issue_df=rights_issue_df))
+	# all_stocks_gains_to_xlsx(2011, 2022)
+	print(cal_stock_indicator_gains('600309'))
+

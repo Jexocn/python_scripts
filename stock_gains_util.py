@@ -21,8 +21,8 @@ def str_to_date(hist_date):
 		pass
 	return ret_date
 
-def date_to_str(date):
-	return '%d-%02d-%02d' % (date.year, date.month, date.day)
+def date_to_str(date, split='-'):
+	return split.join([str(date.year), '%02d' % date.month, '%02d' % date.day])
 
 def cell_to_number(cell):
 	if pd.isna(cell):
@@ -47,15 +47,15 @@ def cal_buy_amount(cash, price, fee_rate, min_fee):
 		buy_amount -= 100
 
 def is_rights_issue_sell_date(hist_date, next_hist_date, rights_issue_df):
-	if hist_date is None or next_hist_date is None:
+	if hist_date is None:
 		return False
 	for i in range(0, len(rights_issue_df)):
 		row = rights_issue_df.iloc[i]
 		record_date = row['股权登记日']
-		if not record_date is datetime.date:
+		if not isinstance(record_date, datetime.date):
 			record_date = str_to_date(record_date)
 		if not record_date is None:
-			if hist_date <= record_date and next_hist_date > record_date:
+			if hist_date == record_date or (hist_date < record_date and not next_hist_date is None and next_hist_date > record_date):
 				return True
 			elif hist_date > record_date:
 				# rights_issue_df 是按日期倒序排列的
@@ -64,6 +64,7 @@ def is_rights_issue_sell_date(hist_date, next_hist_date, rights_issue_df):
 
 def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_date, end_date, init_amount=10000, init_cash=0, roid=0, fee_rate=0, min_fee=0):
 	'''
+		计算A股个股收益
 		hist_df 历史行情数据 ak.stock_zh_a_hist(symbol="000001", period="daily", start_date="20170301", end_date='20210907', adjust="")
 		dividents_df 历史分红数据		ak.stock_dividents_cninfo(symbol="600009")
 		rights_issue_df 历史配股数据	ak.stock_history_dividend_detail(symbol="000002", indicator="配股")
@@ -88,9 +89,9 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 		row = dividents_df.iloc[i]
 		ex_date = row['除权日']
 		received_date = row['派息日']
-		if not ex_date is datetime.date:
+		if not isinstance(ex_date, datetime.date):
 			ex_date = str_to_date(ex_date)
-		if not received_date is datetime.date:
+		if not isinstance(received_date, datetime.date):
 			received_date = str_to_date(received_date)
 		if not ex_date is None:
 			dividents_ex_right[ex_date] = row
@@ -207,4 +208,95 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 						value = round(init_price*amount, 2)
 				rate = round(((value+remain_cash+fh_cash)/init_value-1)*100, 2)
 				data.append([remain_cash, fh_cash, value, amount, rate, hist_date, buy_amount, 0, zz_amount, sg_amount, fh_add_cash])
+	return pd.DataFrame(data, columns=columns)
+
+def next_period_begin_gen(period, day=1):
+	period_mode, period_n = re.findall('^([dmy])([1-9]\d*)$', period)[0]
+	period_n = int(period_n)
+	day = max(min(day, 31), 1)
+
+	def next_period_d(date):
+		return date + datetime.timedelta(days=period_n)
+
+	def fix_day(ret_date):
+		if day > 1:
+			tmp_date = ret_date + datetime.timedelta(days=day-1)
+			ret_date = tmp_date - datetime.timedelta(days=tmp_date.day) if tmp_date.month > ret_date.month else tmp_date
+		return ret_date
+
+	def next_period_m(date):
+		year = date.year + period_n//12
+		month = date.month + period_n%12
+		if month > 12:
+			month -= 12
+			year += 1
+		return fix_day(datetime.date(year, month, 1))
+
+	def next_period_y(date):
+		return fix_day(datetime.date(date.year+period_n, 1, 1))
+
+	if period_mode == 'd':
+		return next_period_d
+	elif period_mode == 'm':
+		return next_period_m
+	elif period_mode == 'y':
+		return next_period_y
+	return None
+
+
+def cal_a_indicator_gains(gains_df, indicator_df, gain_period='m1', begin_date=None, end_date=None):
+	'''
+		计算A股个股区间收益率
+		gains_df 个股收益, cal_a_stock_gains
+		indicator_df 个股指标 ak.stock_a_lg_indicator(symbol="000001")
+		range: 收益率计算区间 d30=30天 m1=1月 y1=1年
+	'''
+	if begin_date is None:
+		begin_date = indicator_df.iloc[0]['trade_date']
+	if end_date is None:
+		end_date = indicator_df.iloc[len(indicator_df)-1]['trade_date']
+	dot_next_period_f = next_period_begin_gen('m1')
+	gain_next_period_f = next_period_begin_gen(gain_period, day=31)
+	gains_idx = 0
+	period_begin = begin_date
+	period_end = dot_next_period_f(period_begin)
+	columns = ['trade_date', 'pe', 'pe_ttm', 'pb', 'ps', 'ps_ttm', 'dv_ratio', 'dv_ttm', 'total_mv', 'gain_rate']
+	data = []
+	for i in range(0, len(indicator_df)):
+		indicator_row = indicator_df.iloc[i]
+		ind_date = indicator_row['trade_date']
+		if ind_date > end_date:
+			break
+		if ind_date < begin_date:
+			continue
+		indicator_next_row = indicator_df.iloc[i+1] if i < len(indicator_df)-1 else None
+		ind_next_date = indicator_next_row['trade_date'] if not indicator_next_row is None else None
+		if ind_next_date is None or ind_next_date >= period_end:
+			gains_begin_row = None
+			gains_end_row = None
+			gains_end_date = gain_next_period_f(ind_date)
+			while gains_idx < len(gains_df):
+				gains_row = gains_df.iloc[gains_idx]
+				gains_date = gains_row['交易日期']
+				if gains_date > ind_date:
+					gains_idx -= 1
+					break
+				gains_begin_row = gains_row
+				gains_idx += 1
+			gains_end_idx = gains_idx + 1
+			while gains_end_idx < len(gains_df):
+				gains_row = gains_df.iloc[gains_end_idx]
+				gains_date = gains_row['交易日期']
+				if gains_date > gains_end_date:
+					gains_end_row = gains_df.iloc[gains_end_idx-1]
+					break
+				gains_end_idx += 1
+			if not gains_end_row is None:
+				if not gains_begin_row is None:
+					gain_rate = round(((1+gains_end_row['总收益率']/100)/(1+gains_begin_row['总收益率']/100)-1)*100, 2)
+				else:
+					gain_rate = gains_end_row['总收益率']
+				data.append([indicator_row[column] for column in columns[:len(columns)-1]] + [gain_rate])
+			if gains_end_row is None:
+				break
 	return pd.DataFrame(data, columns=columns)
