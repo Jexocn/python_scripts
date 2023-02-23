@@ -281,7 +281,7 @@ def all_stocks_gains_to_xlsx(begin_year, end_year, init_amount=10000, fee_rate=0
 		rank_df.sort_values(by='复投年化', ascending=False).to_excel(xw, sheet_name='红利复投')
 
 if __name__ == '__main__':
-	# dividend_detail_df, hist_df, rights_issue_df = fetch_stock_dfs('600309', 2011, 2023)
-	# print(cal_stock_gains_riod('600309', 2011, 2023, dividend_detail_df=dividend_detail_df, hist_df=hist_df, rights_issue_df=rights_issue_df))
-	# print(cal_stock_gains('600309', 2011, 2023, dividend_detail_df=dividend_detail_df, hist_df=hist_df, rights_issue_df=rights_issue_df))
+	# dividend_detail_df, hist_df, rights_issue_df = fetch_stock_dfs('600118', 2011, 2023)
+	# print(cal_stock_gains_riod('600118', 2011, 2023, dividend_detail_df=dividend_detail_df, hist_df=hist_df, rights_issue_df=rights_issue_df))
+	# print(cal_stock_gains('600118', 2011, 2023, dividend_detail_df=dividend_detail_df, hist_df=hist_df, rights_issue_df=rights_issue_df))
 	all_stocks_gains_to_xlsx(2011, 2022)

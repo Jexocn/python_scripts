@@ -54,8 +54,12 @@ def is_rights_issue_sell_date(hist_date, next_hist_date, rights_issue_df):
 		record_date = row['股权登记日']
 		if not record_date is datetime.date:
 			record_date = str_to_date(record_date)
-		if not record_date is None and hist_date <= record_date and next_hist_date > record_date:
-			return True
+		if not record_date is None:
+			if hist_date <= record_date and next_hist_date > record_date:
+				return True
+			elif hist_date > record_date:
+				# rights_issue_df 是按日期倒序排列的
+				return False
 	return False
 
 def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_date, end_date, init_amount=10000, init_cash=0, roid=0, fee_rate=0, min_fee=0):
@@ -92,7 +96,6 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 			dividents_ex_right[ex_date] = row
 		if not received_date is None:
 			dividents_received[received_date] = row
-	print('====', rights_issue_df)
 	init_value = init_amount*init_price + init_cash
 	columns = ['现金', '未到账派息', '总市值', '总持仓', '总收益率', '交易日期', '买入', '卖出', '转增', '送股', '派息']
 	data = []
