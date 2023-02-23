@@ -40,8 +40,8 @@ def cal_buy_amount(cash, price, fee_rate, min_fee):
 	buy_amount = math.floor(cash/(price*100))*100
 	while True:
 		buy_cost = price*buy_amount
-		fee = max(round(buy_cost*fee_rate,2), min_fee)
-		remain_cash = cash - price*buy_amount - fee
+		fee = max(round(buy_cost*fee_rate,2), min_fee) if buy_cost > 0 else 0
+		remain_cash = cash - buy_cost - fee
 		if remain_cash >= 0:
 			return buy_amount, buy_cost, fee, remain_cash
 		buy_amount -= 100
@@ -114,6 +114,7 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 				remain_cash += sell_cash
 				rate = round(((remain_cash+fh_cash)/init_value-1)*100, 2)
 				data.append([remain_cash, fh_cash, 0, 0, rate, hist_date, 0, sell_amount, 0, 0, 0])
+				# print('配股股权登记卖出', sell_amount, sell_cash, fee)
 			elif hist_date in rights_issue_ex_right:
 				assert(amount == 0 or i == 0)
 				if i == 0:
@@ -127,9 +128,10 @@ def cal_a_stock_gains(hist_df, dividents_df, rights_issue_df, init_price, begin_
 					value = row['收盘']*amount
 					rate = round(((value+remain_cash+fh_cash)/init_value-1)*100, 2)
 					data.append([remain_cash, fh_cash, value, amount, rate, hist_date, buy_amount, 0, 0, 0, 0])
+					# print('配股除权买入', buy_amount, buy_cost, fee)
 			else:
 				buy_amount = 0
-				if remain_cash > 0 and pd.notna(row['开盘']) and (amount == 0 or roid > 0):
+				if remain_cash > 0 and pd.notna(row['开盘']) and (sell_cash > 0 or roid > 0):
 					# TODO: 涨停不买入、跌停不卖出
 					buy_amount, buy_cost, fee, sell_cash = cal_buy_amount(remain_cash if roid > 0 or sell_cash == 0 else sell_cash,
 						row['开盘'], fee_rate, min_fee)

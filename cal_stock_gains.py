@@ -56,18 +56,6 @@ def cal_init_price(begin_year, init_hist, dividend_detail_df):
 					init_price = round((init_price - row['派息'])/(1+(row['送股'] + row['转增'])/10), 2)
 	return init_price
 
-def gen_year_dividend_detail(dividend_detail_df, begin_year, end_year):
-	year_dividend_detail = {}
-	for i in range(len(dividend_detail_df)-1, -1, -1):
-		row = dividend_detail_df.loc[i]
-		cqcx_date = row['除权除息日']
-		if(pd.notna(cqcx_date) and cqcx_date.year >= begin_year and cqcx_date.year <= end_year):
-			if(cqcx_date.year in year_dividend_detail):
-				year_dividend_detail[cqcx_date.year].append(row)
-			else:
-				year_dividend_detail[cqcx_date.year] = [row]
-	return year_dividend_detail
-
 def fetch_stock_dfs(symbol, begin_year, end_year):
 	dividend_detail_df = ak.stock_dividents_cninfo(symbol=symbol)
 	rights_issue_df = ak.stock_history_dividend_detail(symbol=symbol, indicator="配股")
@@ -76,22 +64,7 @@ def fetch_stock_dfs(symbol, begin_year, end_year):
 	hist_df = ak.stock_zh_a_hist(symbol=symbol, period="daily", start_date=start_date, end_date=end_date, adjust="")
 	return dividend_detail_df, hist_df, rights_issue_df
 
-def cal_stock_gains(symbol, begin_year, end_year, init_amount=10000, dividend_detail_df=None, hist_df=None, rights_issue_df=None):
-	init_hist = get_init_hist(symbol, begin_year)
-	columns = ['10送x', '10派y', '10转z', '不复权收盘价', '送转股数', '红利', '红利累计', '配股现金', '总持股数量', '总持股市值', '收益率', '年化收益率']
-	idx_years = [year for year in range(begin_year-1, end_year+1)]
-	if dividend_detail_df is None:
-		dividend_detail_df = ak.stock_dividents_cninfo(symbol=symbol)
-	init_price = cal_init_price(begin_year, init_hist, dividend_detail_df)
-	data = [[0, 0, 0, init_price, 0, 0, 0, 0, init_amount, init_amount*init_price, 0, 0]] + [[0 for i in range(0, len(columns))] for k in range(0, len(idx_years)-1)]
-	if hist_df is None:
-		start_date = '%d0101' % (begin_year)
-		end_date = '%d1231' % (end_year)
-		hist_df = ak.stock_zh_a_hist(symbol=symbol, period="daily", start_date=start_date, end_date=end_date, adjust="")
-	if rights_issue_df is None:
-		rights_issue_df = ak.stock_history_dividend_detail(symbol=symbol, indicator="配股")
-	gains_df = util.cal_a_stock_gains(hist_df, dividend_detail_df, rights_issue_df, init_price, datetime.date(begin_year, 1, 1), datetime.date(end_year, 12, 31),
-		init_amount, 0, 0)
+def fill_data_dividents(data, dividend_detail_df, begin_year, end_year):
 	for i in range(0, len(dividend_detail_df)):
 		row = dividend_detail_df.iloc[i]
 		ex_date = row['除权日']
@@ -105,6 +78,24 @@ def cal_stock_gains(symbol, begin_year, end_year, init_amount=10000, dividend_de
 				data[idx][1] += row['派息比例']
 			if pd.notna(row['转增比例']):
 				data[idx][2] += row['转增比例']
+
+def cal_stock_gains(symbol, begin_year, end_year, init_amount=10000, dividend_detail_df=None, hist_df=None, rights_issue_df=None):
+	init_hist = get_init_hist(symbol, begin_year)
+	columns = ['10送x', '10派y', '10转z', '不复权收盘价', '送转股数', '红利', '红利累计', '剩余现金', '总持股数量', '总持股市值', '收益率', '年化收益率']
+	idx_years = [year for year in range(begin_year-1, end_year+1)]
+	if dividend_detail_df is None:
+		dividend_detail_df = ak.stock_dividents_cninfo(symbol=symbol)
+	init_price = cal_init_price(begin_year, init_hist, dividend_detail_df)
+	data = [[0, 0, 0, init_price, 0, 0, 0, 0, init_amount, init_amount*init_price, 0, 0]] + [[0 for i in range(0, len(columns))] for k in range(0, len(idx_years)-1)]
+	if hist_df is None:
+		start_date = '%d0101' % (begin_year)
+		end_date = '%d1231' % (end_year)
+		hist_df = ak.stock_zh_a_hist(symbol=symbol, period="daily", start_date=start_date, end_date=end_date, adjust="")
+	if rights_issue_df is None:
+		rights_issue_df = ak.stock_history_dividend_detail(symbol=symbol, indicator="配股")
+	gains_df = util.cal_a_stock_gains(hist_df, dividend_detail_df, rights_issue_df, init_price, datetime.date(begin_year, 1, 1), datetime.date(end_year, 12, 31),
+		init_amount, 0, 0)
+	fill_data_dividents(data, dividend_detail_df, begin_year, end_year)
 	year = begin_year
 	latest_price = init_price
 
@@ -113,7 +104,8 @@ def cal_stock_gains(symbol, begin_year, end_year, init_amount=10000, dividend_de
 		idx = year - begin_year + 1
 		data[idx][3] = latest_price
 		data[idx][6] = data[idx-1][6] + data[idx][5]
-		data[idx][7] = data[idx][7] - data[idx][6] if data[idx][7] > 0 else data[idx-1][7]
+		if data[idx][7] == 0:
+			data[idx][7] = data[idx-1][7]
 		data[idx][11] = round(((1+data[idx][10]/100)**(1/idx)-1)*100, 2)
 		year += 1
 		while year < fill_end_year:
@@ -145,117 +137,60 @@ def cal_stock_gains(symbol, begin_year, end_year, init_amount=10000, dividend_de
 	df = pd.DataFrame(data, index=idx_years, columns=columns)
 	return df
 
-def cal_dividend_inc_amount(dividend_detail_df, hist_df, begin_year, end_year, init_amount, fee_rate=0.0005, min_fee=5):
-	dd_idx = -1
-	dd_row = None
-	cqcx_date = None
-	dividend_detail_df.insert(dividend_detail_df.shape[1], 'px', 0)
-	dividend_detail_df.insert(dividend_detail_df.shape[1], 'px_inc', 0)
-	dividend_detail_df.insert(dividend_detail_df.shape[1], 'px_remain', 0)
-	for i in range(len(dividend_detail_df)-1, -1, -1):
-		dd_row = dividend_detail_df.loc[i]
-		cqcx_date = dd_row['除权除息日']
-		if pd.notna(cqcx_date) and cqcx_date.year >= begin_year:
-			dd_idx = i
-			break
-	if dd_idx == -1:
-		return
-	amount = init_amount
-	px_remain = 0
-	for i in range(0, len(hist_df)):
-		row = hist_df.loc[i]
-		hist_date = str_to_date(row['日期'])
-		if hist_date >= cqcx_date and (not (row['最高'] - row['最低'] < 0.00001 and row['涨跌幅'] > 4)):	# 是否涨停
-			price = row['收盘']
-			while pd.isna(cqcx_date) or cqcx_date <= hist_date:
-				if pd.notna(cqcx_date):
-					px = round(amount*dd_row['派息']/10, 2)
-					total_px = px + px_remain
-					sz_inc = round(amount*(dd_row['送股'] + dd_row['转增'])/10)
-					inc = math.floor(total_px/(price*100))*100
-					total_price = inc*price if inc > 0 else 0
-					fee = max(round(total_price*fee_rate, 2), min_fee) if inc > 0 else 0
-					px_remain = total_px - total_price - fee
-					while px_remain < 0:
-						inc -= 100
-						total_price = inc*price if inc > 0 else 0
-						fee = max(round(total_price*fee_rate, 2), min_fee) if inc > 0 else 0
-						px_remain = total_px - total_price - fee
-					amount += inc + sz_inc
-					dividend_detail_df.loc[dd_idx, 'px'] = px
-					dividend_detail_df.loc[dd_idx, 'px_inc'] = inc
-					dividend_detail_df.loc[dd_idx, 'px_remain'] = px_remain
-				dd_idx -= 1
-				if dd_idx < 0:
-					break
-				dd_row = dividend_detail_df.loc[dd_idx]
-				cqcx_date = dd_row['除权除息日']
-			if dd_idx < 0 or (pd.notna(cqcx_date) and cqcx_date.year > end_year):
-				break
-		if hist_date.year > end_year:
-			break
-	while dd_idx > 0 and (pd.isna(cqcx_date) or cqcx_date.year <= end_year):
-		px = amount*dd_row['派息']
-		px_remain += px
-		dividend_detail_df.loc[dd_idx, 'px'] = px
-		dividend_detail_df.loc[dd_idx, 'px_remain'] = px_remain
-		dd_idx -= 1
-		if dd_idx < 0:
-			break
-		dd_row = dividend_detail_df.loc[dd_idx]
-		cqcx_date = dd_row['除权除息日']
-
-def cal_stock_gains_riod(symbol, begin_year, end_year, init_amount=10000, dividend_detail_df=None, hist_df=None, fee_rate=0.0005, min_fee=5):
+def cal_stock_gains_riod(symbol, begin_year, end_year, init_amount=10000, dividend_detail_df=None, hist_df=None, rights_issue_df=None, fee_rate=0.0005, min_fee=5):
 	init_hist = get_init_hist(symbol, begin_year)
-	columns = ['10送x', '10派y', '10转z', '不复权收盘价', '送转股数', '红利', '复投股数', '剩余红利', '总持股数量', '总持股市值', '收益率', '年化收益率']
+	columns = ['10送x', '10派y', '10转z', '不复权收盘价', '送转股数', '红利', '复投股数', '剩余现金', '总持股数量', '总持股市值', '收益率', '年化收益率']
 	idx_years = [year for year in range(begin_year-1, end_year+1)]
 	if dividend_detail_df is None:
-		dividend_detail_df = ak.stock_history_dividend_detail(symbol=symbol, indicator="分红")
+		dividend_detail_df = ak.stock_dividents_cninfo(symbol=symbol)
 	init_price = cal_init_price(begin_year, init_hist, dividend_detail_df)
 	data = [[0, 0, 0, init_price, 0, 0, 0, 0, init_amount, init_amount*init_price, 0, 0]] + [[0 for i in range(0, len(columns))] for k in range(0, len(idx_years)-1)]
 	if hist_df is None:
 		start_date = '%d0101' % (begin_year)
 		end_date = '%d1231' % (end_year)
 		hist_df = ak.stock_zh_a_hist(symbol=symbol, period="daily", start_date=start_date, end_date=end_date, adjust="")
-	cal_dividend_inc_amount(dividend_detail_df, hist_df, begin_year, end_year, init_amount, fee_rate, min_fee)
-	year_dividend_detail = gen_year_dividend_detail(dividend_detail_df, begin_year, end_year)
-	# 历年分红
-	for year in range(begin_year, end_year+1):
-		idx = year - begin_year + 1
-		if(year in year_dividend_detail):
-			for row in year_dividend_detail[year]:
-				data[idx][0] += row['送股']
-				data[idx][1] += row['派息']
-				data[idx][2] += row['转增']
-				data[idx][5] += row['px']
-				data[idx][6] += row['px_inc']
-				data[idx][7] = row['px_remain']
-		else:
-			data[idx][7] = data[idx-1][7]
-	last_year_row = None
+	if rights_issue_df is None:
+		rights_issue_df = ak.stock_history_dividend_detail(symbol=symbol, indicator="配股")
+	gains_df = util.cal_a_stock_gains(hist_df, dividend_detail_df, rights_issue_df, init_price, datetime.date(begin_year, 1, 1), datetime.date(end_year, 12, 31),
+		init_amount, 0, 1, fee_rate, min_fee)
+	fill_data_dividents(data, dividend_detail_df, begin_year, end_year)
 	year = begin_year
-	for i in range(0, len(hist_df)):
-		row = hist_df.loc[i]
-		hist_date = str_to_date(row['日期'])
-		if(hist_date.year > year):
-			idx = year-begin_year + 1
-			price = 0
-			if last_year_row is None:
-				price = data[idx-1][3]
-			else:
-				price = last_year_row['收盘']
-			# 最后一个交易日到下一年之间之间分红除权除息 TODO
-			data[idx][3] = price
+	latest_price = init_price
+
+	def fill_data(fill_end_year):
+		nonlocal year
+		idx = year - begin_year + 1
+		data[idx][3] = latest_price
+		if data[idx][7] == 0:
+			data[idx][7] = data[idx-1][7]
+		data[idx][11] = round(((1+data[idx][10]/100)**(1/idx)-1)*100, 2)
+		year += 1
+		while year < fill_end_year:
+			idx = year - begin_year + 1
+			data[idx][3] = data[idx-1][3]
+			data[idx][7] = data[idx-1][7]
+			data[idx][8] = data[idx-1][8]
+			data[idx][9] = data[idx-1][9]
+			data[idx][10] = data[idx-1][10]
+			data[idx][11] = round(((1+data[idx][10]/100)**(1/idx)-1)*100, 2)
 			year += 1
-		last_year_row = row
-	data[year-begin_year+1][3] = last_year_row['收盘']
-	for idx in range(1, len(idx_years)):
-		amount = data[idx-1][8]
-		data[idx][4] = round((data[idx][0] + data[idx][2])/10*amount)
-		data[idx][8] = amount + data[idx][4] + data[idx][6]
-		data[idx][9] = data[idx][8]*data[idx][3]
-		data[idx][10] = round((data[idx][7]+data[idx][9])/data[0][9]-1, 4)
-		data[idx][11] = round((1+data[idx][10])**(1/idx)-1, 4)
+
+	for i in range(0, len(gains_df)):
+		row = gains_df.iloc[i]
+		if year < row['交易日期'].year:
+			fill_data(row['交易日期'].year)
+		idx = year - begin_year + 1
+		if row['总持仓'] > 0:
+			latest_price = round(row['总市值']/row['总持仓'], 2)
+			data[idx][6] += row['买入']
+		data[idx][4] += row['送股'] + row['转增']
+		data[idx][5] += row['派息']
+		data[idx][7] = row['现金'] + row['未到账派息']
+		data[idx][8] = row['总持仓']
+		data[idx][9] = row['总市值']
+		data[idx][10] = row['总收益率']
+	if year <= end_year:
+		fill_data(end_year+1)
 	df = pd.DataFrame(data, index=idx_years, columns=columns)
 	return df
 
@@ -346,8 +281,8 @@ def all_stocks_gains_to_xlsx(begin_year, end_year, init_amount=10000, fee_rate=0
 		rank_df.sort_values(by='复投年化', ascending=False).to_excel(xw, sheet_name='红利复投')
 
 if __name__ == '__main__':
-	# dividend_detail_df, hist_df = fetch_stock_dfs('600309', 2011, 2023)
-	# print(cal_stock_gains_riod('600309', 2011, 2023, dividend_detail_df=dividend_detail_df, hist_df=hist_df))
-	print(cal_stock_gains('000001', 2011, 2023))
+	# dividend_detail_df, hist_df = fetch_stock_dfs('000001', 2011, 2023)
+	print(cal_stock_gains_riod('000001', 2011, 2023))
+	# print(cal_stock_gains('000001', 2011, 2023))
 	# fetch_stocks_and_cal_gains()
 	# all_stocks_gains_to_xlsx(2011, 2022)
