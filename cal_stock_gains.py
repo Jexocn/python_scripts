@@ -78,13 +78,22 @@ def fetch_stock_dfs(symbol, begin_year, end_year):
 	dividend_detail_df = None
 	try:
 		dividend_detail_df = ak.stock_dividents_cninfo(symbol=symbol)
+	except Exception as e:
+		print('fetch_stock_dfs ak.stock_dividents_cninfo fail', symbol, e)
+		dividend_detail_df = None
+		pass
 	finally:
 		pass
 	if dividend_detail_df is None:
 		try:
 			dividend_detail_df = ak.stock_history_dividend_detail(symbol=symbol, indicator="分红")
 			detail_dfs = fetch_stock_sina_dividents_detail_dfs(symbol, dividend_detail_df)
+			time.sleep(2+random.random()*3)
 			dividend_detail_df = util.stock_dividents_sina_to_cinfo(dividend_detail_df, detail_dfs)
+		except Exception as e:
+			print('fetch_stock_dfs ak.stock_history_dividend_detail fail', symbol, e)
+			dividend_detail_df = None
+			pass
 		finally:
 			pass
 	rights_issue_df = ak.stock_history_dividend_detail(symbol=symbol, indicator="配股")
@@ -321,10 +330,79 @@ def cal_stock_indicator_gains(symbol, begin_date=None, end_date=None):
 	gains_df = util.cal_a_stock_gains(hist_df, dividend_detail_df, rights_issue_df, 0, hist_begin_date, hist_end_date, 0, 100000, 1)
 	return util.cal_a_indicator_gains(gains_df, indicator_df, 'm1', begin_date, end_date)
 
+def stock_indicator_gains_to_xlsx(symbol, save_dir='./stock_indicator_gains/'):
+	info_em_df = ak.stock_individual_info_em(symbol=symbol)
+	if len(info_em_df) == 0:
+		print('股票代码 {0} 不存在'.format(symbol))
+		return False
+	ss_date = info_em_df.loc[info_em_df['item'] == '上市时间'].iloc[0]['value']
+	stock_name = info_em_df.loc[info_em_df['item'] == '股票简称'].iloc[0]['value']
+	total_value = info_em_df.loc[info_em_df['item'] == '总市值'].iloc[0]['value']
+	if not isinstance(ss_date, datetime.date):
+		ss_date = str_to_date(ss_date)
+	if ss_date is None:
+		print('{0} {1} 未上市，不处理'.format(symbol, stock_name, ss_date, begin_year-1))
+		return False
+	if stock_name.upper().find('ST') != -1 or stock_name.find('退市') != -1 or re.search('^\d+(.\d+)?$', str(total_value)) is None:
+		print('{0} {1} ST股、退市股不处理'.format(symbol, stock_name))
+		return False
+	save_fname = '{0}{1}-{2}.xlsx'.format(save_dir, symbol, stock_name)
+	if os.path.exists(save_fname):
+		print('{0} {1} 已处理过'.format(symbol, stock_name))
+		return False
+	gains_df = cal_stock_indicator_gains(symbol)
+	if not os.path.exists(save_dir):
+		os.makedirs(save_dir)
+	with pd.ExcelWriter('{0}{1}-{2}.xlsx'.format(save_dir, symbol, stock_name)) as xw:
+		gains_df.to_excel(xw, sheet_name='指标收益率')
+	print('{0} {1} 保存成功'.format(symbol, stock_name))
+	return True
+
+def batch_stocks_indicator_gains_to_xlsx(stocks_df, save_dir='./stock_indicator_gains/'):
+	stock_count = len(stocks_df)
+	p50 = max(stock_count//50, 2)
+	for i in range(0, len(stocks_df)):
+		symbol = stocks_df.loc[i]['代码']
+		need_sleep = 0.05
+		retry = 0
+		while retry < 3:
+			if retry > 0:
+				print('{0}秒后重试：{1}'.format(round(need_sleep, 1), retry))
+				time.sleep(need_sleep)
+			try:
+				need_sleep = 2+random.random()*3 if stock_indicator_gains_to_xlsx(symbol, save_dir) else 0.05
+				break
+			except Exception as e:
+				print('股票代码：{0} 保存失败'.format(symbol))
+				print(e)
+				# 出现失败要停止
+				need_sleep = 5+5*random.random()
+			finally:
+				retry += 1
+		print("\r", end="")
+		print("进度: {0}/{1}: ".format(i+1, stock_count), "▋" * (i // p50), end="")
+		sys.stdout.flush()
+		time.sleep(need_sleep)
+
+def all_stocks_indicator_gains_to_xlsx(save_dir='./stock_indicator_gains/'):
+	print('获取沪A股票列表...')
+	sh_stocks_df = ak.stock_sh_a_spot_em()
+	print('获取沪A股票列表 完成')
+	print('获取深A股票列表...')
+	sz_stocks_df = ak.stock_sz_a_spot_em()
+	print('获取深A股票列表 完成')
+	print('计算保存沪A股票...')
+	batch_stocks_indicator_gains_to_xlsx(sh_stocks_df, save_dir)
+	print('计算保存沪A股票 完成')
+	print('计算保存深A股票...')
+	batch_stocks_indicator_gains_to_xlsx(sz_stocks_df, save_dir)
+	print('计算保存深A股票 完成')
+
 if __name__ == '__main__':
 	# dividend_detail_df, hist_df, rights_issue_df = fetch_stock_dfs('600309', 2011, 2023)
 	# print(cal_stock_gains_riod('600309', 2011, 2023, dividend_detail_df=dividend_detail_df, hist_df=hist_df, rights_issue_df=rights_issue_df))
 	# print(cal_stock_gains('600309', 2011, 2023, dividend_detail_df=dividend_detail_df, hist_df=hist_df, rights_issue_df=rights_issue_df))
 	# all_stocks_gains_to_xlsx(2011, 2022)
-	print(cal_stock_indicator_gains('600309'))
+	# print(cal_stock_indicator_gains('600309'))
+	all_stocks_indicator_gains_to_xlsx()
 
