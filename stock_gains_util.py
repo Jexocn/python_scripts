@@ -278,7 +278,7 @@ def cal_a_indicator_gains(gains_df, indicator_df, gain_period='m1', begin_date=N
 	if end_date is None:
 		end_date = indicator_df.iloc[len(indicator_df)-1]['trade_date']
 	dot_next_period_f = next_period_begin_gen('m1')
-	gain_next_period_f = next_period_begin_gen(gain_period, day=31)
+	gain_next_period_f = next_period_begin_gen(gain_period, day=0)
 	gains_idx = 0
 	period_end = dot_next_period_f(begin_date)
 	columns = ['trade_date', 'pe', 'pe_ttm', 'pb', 'ps', 'ps_ttm', 'dv_ratio', 'dv_ttm', 'total_mv', 'gain_rate']
@@ -323,3 +323,4 @@ def cal_a_indicator_gains(gains_df, indicator_df, gain_period='m1', begin_date=N
 				break
 			period_end = dot_next_period_f(period_end)
 	return pd.DataFrame(data, columns=columns)
+
