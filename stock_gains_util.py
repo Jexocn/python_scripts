@@ -239,10 +239,11 @@ def next_period_begin_gen(period, day=1):
 	def next_period_d(date):
 		return date + datetime.timedelta(days=period_n)
 
-	def fix_day(ret_date):
-		if day > 1:
-			tmp_date = ret_date + datetime.timedelta(days=day-1)
-			ret_date = tmp_date - datetime.timedelta(days=tmp_date.day) if tmp_date.month > ret_date.month else tmp_date
+	def fix_day(ret_date, date):
+		if day == 1 or (day < 1 and date.day == 1):
+			return ret_date
+		tmp_date = ret_date + datetime.timedelta(days=day-1 if day > 1 else date.day-1)
+		ret_date = tmp_date - datetime.timedelta(days=tmp_date.day) if tmp_date.month > ret_date.month else tmp_date
 		return ret_date
 
 	def next_period_m(date):
@@ -251,10 +252,10 @@ def next_period_begin_gen(period, day=1):
 		if month > 12:
 			month -= 12
 			year += 1
-		return fix_day(datetime.date(year, month, 1))
+		return fix_day(datetime.date(year, month, 1), date)
 
 	def next_period_y(date):
-		return fix_day(datetime.date(date.year+period_n, 1, 1))
+		return fix_day(datetime.date(date.year+period_n, 1, 1), date)
 
 	if period_mode == 'd':
 		return next_period_d
