@@ -56,6 +56,24 @@ def cal_init_price(begin_year, init_hist, dividend_detail_df):
 					init_price = round((init_price - row['派息'])/(1+(row['送股'] + row['转增'])/10), 2)
 	return init_price
 
+def fetch_stock_sina_dividents_detail_dfs(symbol, dividend_detail_df):
+	ret_dfs = {}
+	for i in range(0, len(dividend_detail_df)):
+		row = dividend_detail_df.iloc[i]
+		date = row['公告日期']
+		detail_df = None
+		try:
+			detail_df = ak.stock_history_dividend_detail(symbol=symbol, indicator="分红", date=date_to_str(date))
+		except Exception as e:
+			break
+		finally:
+			pass
+		if not detail_df is None:
+			ret_dfs[date] = detail_df
+			# 不能太快获取，会被封禁
+			time.sleep(2+random.random()*3)
+	return ret_dfs
+
 def fetch_stock_dfs(symbol, begin_year, end_year):
 	dividend_detail_df = None
 	try:
@@ -65,7 +83,8 @@ def fetch_stock_dfs(symbol, begin_year, end_year):
 	if dividend_detail_df is None:
 		try:
 			dividend_detail_df = ak.stock_history_dividend_detail(symbol=symbol, indicator="分红")
-			dividend_detail_df = util.stock_dividents_sina_to_cinfo(dividend_detail_df)
+			detail_dfs = fetch_stock_sina_dividents_detail_dfs(symbol, dividend_detail_df)
+			dividend_detail_df = util.stock_dividents_sina_to_cinfo(dividend_detail_df, detail_dfs)
 		finally:
 			pass
 	rights_issue_df = ak.stock_history_dividend_detail(symbol=symbol, indicator="配股")
@@ -295,9 +314,9 @@ def cal_stock_indicator_gains(symbol, begin_date=None, end_date=None):
 		begin_date = str_to_date(begin_date)
 	if not (end_date is None or isinstance(end_date, datetime.date)):
 		end_date = str_to_date(end_date)
-	indicator_df = ak.stock_a_lg_indicator(symbol=symbol)
+	indicator_df = ak.stock_a_lg_indicator(symbol=symbol)	
 	hist_begin_date = indicator_df.iloc[0]['trade_date']
-	hist_end_date = indicator_df.iloc[len(indicator_df)-1]['trade_date']
+	hist_end_date = indicator_df.iloc[len(indicator_df)-1]['trade_date']	
 	dividend_detail_df, hist_df, rights_issue_df = fetch_stock_dfs(symbol, hist_begin_date+datetime.timedelta(days=1), hist_end_date)
 	gains_df = util.cal_a_stock_gains(hist_df, dividend_detail_df, rights_issue_df, 0, hist_begin_date, hist_end_date, 0, 100000, 1)
 	return util.cal_a_indicator_gains(gains_df, indicator_df, 'm1', begin_date, end_date)
