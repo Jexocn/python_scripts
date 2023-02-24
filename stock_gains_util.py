@@ -299,7 +299,8 @@ def cal_a_indicator_gains(gains_df, indicator_df, gain_period='m1', begin_date=N
 				gains_row = gains_df.iloc[gains_idx]
 				gains_date = gains_row['交易日期']
 				if gains_date > ind_date:
-					gains_idx -= 1
+					if not gains_begin_row is None:
+						gains_idx -= 1
 					break
 				gains_begin_row = gains_row
 				gains_idx += 1
